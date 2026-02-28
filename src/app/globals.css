@@ -1,42 +1,306 @@
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@import "tailwindcss";
+
+@theme {
+  /* LoL Hextech-inspired palette */
+  --color-bg-primary: #010a13;
+  --color-bg-secondary: #0a1628;
+  --color-bg-card: #0a1929;
+  --color-bg-card-hover: #0d2137;
+  --color-bg-surface: #1a2d45;
+
+  /* Gold hierarchy */
+  --color-gold-bright: #f0e6d3;
+  --color-gold-primary: #c8aa6e;
+  --color-gold-secondary: #c89b3c;
+  --color-gold-dark: #785a28;
+  --color-gold-muted: #463714;
+
+  /* Blue hierarchy */
+  --color-blue-bright: #cdfafa;
+  --color-blue-primary: #0ac8b9;
+  --color-blue-secondary: #0397ab;
+  --color-blue-dark: #005a82;
+  --color-blue-glow: #0ac8b9;
+
+  /* Text */
+  --color-text-primary: #f0e6d3;
+  --color-text-secondary: #a09b8c;
+  --color-text-muted: #5b5a56;
+
+  /* Status */
+  --color-status-online: #1db954;
+  --color-status-ingame: #0ac8b9;
+  --color-status-offline: #3c3c41;
+  --color-danger: #e84057;
+  --color-win: #28c76f;
+  --color-loss: #e84057;
+
+  /* Fonts — values set by next/font CSS vars in layout.tsx */
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-body);
+
+  /* Keep old aliases for compat */
+  --color-accent-gold: #c8aa6e;
+  --color-accent-teal: #0ac8b9;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Global base */
+body {
+  font-family: var(--font-body), 'Segoe UI', sans-serif;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  min-height: 100vh;
+}
+
+/* LoL atmospheric background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -20%, rgba(10, 200, 185, 0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 40% at 20% 100%, rgba(200, 170, 110, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(200, 170, 110, 0.04) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Unified hextech corner shape — diagonal cuts on top-right & bottom-left */
+.hex-clip {
+  clip-path: polygon(
+    0% 0%, calc(100% - 16px) 0%, 100% 16px,
+    100% 100%, 16px 100%, 0% calc(100% - 16px)
+  );
+}
+
+/* Card border frame — gold wrapper with padding for continuous border along diagonals */
+.card-border-wrap {
+  background: linear-gradient(180deg, var(--color-gold-dark), var(--color-gold-muted));
+  clip-path: polygon(
+    0% 0%, calc(100% - 16px) 0%, 100% 16px,
+    100% 100%, 16px 100%, 0% calc(100% - 16px)
+  );
+  padding: 1px;
+  transition: background 0.3s ease;
+}
+.card-border-wrap:hover {
+  background: linear-gradient(180deg, var(--color-gold-secondary), var(--color-gold-dark));
+}
+.card-border-wrap--ingame {
+  background: linear-gradient(180deg, var(--color-blue-secondary), var(--color-blue-dark));
+  box-shadow: 0 0 15px rgba(10, 200, 185, 0.15);
+}
+.card-border-wrap--ingame:hover {
+  background: linear-gradient(180deg, var(--color-blue-primary), var(--color-blue-secondary));
+}
+
+/* In-game card inner glow */
+.ingame-glow {
+  box-shadow: inset 0 0 15px rgba(10, 200, 185, 0.05);
+}
+
+/* Scanning line for in-game cards */
+.scan-line::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-blue-glow), transparent);
+  animation: scanDown 3s ease-in-out infinite;
+  z-index: 15;
+  opacity: 0.4;
+}
+
+@keyframes scanDown {
+  0% { top: 0; opacity: 0; }
+  10% { opacity: 0.4; }
+  90% { opacity: 0.4; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* Gold shimmer for title */
+@keyframes goldShimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.gold-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-gold-primary) 0%,
+    var(--color-gold-bright) 25%,
+    var(--color-gold-primary) 50%,
+    var(--color-gold-bright) 75%,
+    var(--color-gold-primary) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: goldShimmer 6s linear infinite;
+}
+
+/* Status pulse */
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 4px rgba(10, 200, 185, 0.6); }
+  50% { box-shadow: 0 0 12px rgba(10, 200, 185, 0.9), 0 0 20px rgba(10, 200, 185, 0.3); }
+}
+.status-pulse {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+/* Card reveal animation */
+@keyframes cardReveal {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.card-reveal {
+  animation: cardReveal 0.4s ease-out backwards;
+}
+
+/* Shared hextech corner shape — sharp diagonal cuts */
+/* Only top-left and bottom-right get the angled cut (LoL client style) */
+
+/* LoL-style button with border wrapper */
+.lol-button-wrap {
+  position: relative;
+  background: linear-gradient(180deg, var(--color-gold-dark), var(--color-gold-muted));
+  padding: 2px;
+  clip-path: polygon(
+    0% 0%, calc(100% - 16px) 0%, 100% 16px,
+    100% 100%, 16px 100%, 0% calc(100% - 16px)
+  );
+}
+.lol-button {
+  position: relative;
+  background: linear-gradient(180deg, #785a28 0%, #463714 100%);
+  color: var(--color-gold-bright);
+  font-family: var(--font-display), serif;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  clip-path: polygon(
+    0% 0%, calc(100% - 14px) 0%, 100% 14px,
+    100% 100%, 14px 100%, 0% calc(100% - 14px)
+  );
+  transition: background 0.35s ease, color 0.35s ease;
+  width: 100%;
+}
+.lol-button:hover:not(:disabled) {
+  background: linear-gradient(180deg, #c89b3c 0%, #785a28 100%);
+  color: #010a13;
+}
+.lol-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* LoL-style input — wrapped in a container for visible hex border */
+.lol-input-wrap {
+  position: relative;
+  background: linear-gradient(180deg, var(--color-gold-dark), var(--color-gold-muted));
+  clip-path: polygon(
+    0% 0%, calc(100% - 16px) 0%, 100% 16px,
+    100% 100%, 16px 100%, 0% calc(100% - 16px)
+  );
+  padding: 1px;
+}
+.lol-input-wrap:focus-within {
+  background: linear-gradient(180deg, var(--color-gold-primary), var(--color-gold-dark));
+}
+.lol-input {
+  background: var(--color-bg-secondary);
+  border: none;
+  color: var(--color-text-primary);
+  font-family: var(--font-body), sans-serif;
+  transition: all 0.2s ease;
+  clip-path: polygon(
+    0% 0%, calc(100% - 15px) 0%, 100% 15px,
+    100% 100%, 15px 100%, 0% calc(100% - 15px)
+  );
+  width: 100%;
+}
+.lol-input:focus {
+  outline: none;
+}
+.lol-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Decorative gold divider */
+.lol-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-gold-dark), var(--color-gold-secondary), var(--color-gold-dark), transparent);
+}
+
+/* Modal hex clip — only on sm+ to avoid mobile overflow clipping */
+@media (min-width: 640px) {
+  .hex-clip-modal {
+    clip-path: polygon(0% 0%, calc(100% - 20px) 0%, 100% 20px, 100% 100%, 20px 100%, 0% calc(100% - 20px));
   }
 }
 
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
+/* Scoreboard modal animations */
+@keyframes scoreboardFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scoreboardSlideUp {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.scoreboard-backdrop {
+  animation: scoreboardFadeIn 0.2s ease-out;
+}
+.scoreboard-panel {
+  animation: scoreboardSlideUp 0.3s ease-out;
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .scan-line::after,
+  .gold-shimmer,
+  .status-pulse,
+  .card-reveal,
+  .scoreboard-backdrop,
+  .scoreboard-panel {
+    animation: none !important;
+  }
 }
 
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-}
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--color-bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--color-gold-dark); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-gold-secondary); }
 
-a {
-  color: inherit;
-  text-decoration: none;
+/* Rank chart */
+.rank-chart-container {
+  background: var(--color-bg-secondary);
+  border: 1px solid rgba(120, 90, 40, 0.2);
+  border-radius: 4px;
+  padding: 12px;
 }
-
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
+.rank-chart-tooltip {
+  position: absolute;
+  transform: translate(-50%, -120%);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-gold-dark);
+  padding: 8px 10px;
+  pointer-events: none;
+  z-index: 20;
+  min-width: 120px;
+  clip-path: polygon(
+    0% 0%, calc(100% - 6px) 0%, 100% 6px,
+    100% 100%, 6px 100%, 0% calc(100% - 6px)
+  );
+}
+@media (max-width: 639px) {
+  .rank-chart-tooltip {
+    pointer-events: auto;
   }
 }

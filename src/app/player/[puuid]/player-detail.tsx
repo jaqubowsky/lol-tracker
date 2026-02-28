@@ -1,0 +1,459 @@
+"use client";
+
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { fetchPlayerDetail, fetchRankedMatches, resolveAccountNames } from "./action";
+import { checkRateLimit } from "@/utils/rate-limit-event";
+import { estimateRankProgression } from "@/lib/rank-utils";
+import { getFriends } from "@/utils/storage";
+import { PlayerHeader } from "@/components/player-detail/player-header";
+import { RankFilters } from "@/components/player-detail/rank-filters";
+import { RankChart } from "@/components/player-detail/rank-chart";
+import { MatchStatsSummary } from "@/components/player-detail/match-stats-summary";
+import { ChampionStats } from "@/components/player-detail/champion-stats";
+import { FrequentTeammates } from "@/components/player-detail/frequent-teammates";
+import { MatchHistoryTable } from "@/components/player-detail/match-history-table";
+import { ScoreboardModal } from "@/components/scoreboard-modal/scoreboard-modal";
+import type {
+  PlayerDetail,
+  RankedMatchDetail,
+  QueueFilter,
+  TimeRangeFilter,
+  CustomDateRange,
+  Friend,
+  Region,
+} from "@/utils/types";
+
+interface PlayerDetailPageProps {
+  puuid: string;
+}
+
+function dateToEpochSeconds(dateStr: string): number {
+  return Math.floor(new Date(dateStr).getTime() / 1000);
+}
+
+// ---------------------------------------------------------------------------
+// Cache key + per-filter-combo cache
+// ---------------------------------------------------------------------------
+interface CacheEntry {
+  matches: RankedMatchDetail[];
+  hasMore: boolean;
+}
+
+function cacheKey(q: QueueFilter, tr: TimeRangeFilter, custom?: CustomDateRange): string {
+  if (tr === "custom" && custom?.startDate && custom?.endDate) {
+    return `${q}|custom|${custom.startDate}|${custom.endDate}`;
+  }
+  return `${q}|${tr}`;
+}
+
+// ---------------------------------------------------------------------------
+// Parse / validate query params
+// ---------------------------------------------------------------------------
+const VALID_QUEUES: QueueFilter[] = ["all", "solo", "flex"];
+const VALID_TIMES: TimeRangeFilter[] = ["7d", "14d", "30d", "all", "custom"];
+
+function parseQueue(v: string | null): QueueFilter {
+  return VALID_QUEUES.includes(v as QueueFilter) ? (v as QueueFilter) : "all";
+}
+function parseTime(v: string | null): TimeRangeFilter {
+  return VALID_TIMES.includes(v as TimeRangeFilter) ? (v as TimeRangeFilter) : "all";
+}
+
+const VALID_REGIONS: Region[] = ["eun1", "euw1"];
+function parseRegion(v: string | null): Region {
+  return VALID_REGIONS.includes(v as Region) ? (v as Region) : "eun1";
+}
+
+export function PlayerDetailPage({ puuid }: PlayerDetailPageProps) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const region = parseRegion(searchParams.get("region"));
+
+  // Initialise filter state from URL query params
+  const [queue, setQueue] = useState<QueueFilter>(() => parseQueue(searchParams.get("queue")));
+  const [timeRange, setTimeRange] = useState<TimeRangeFilter>(() => parseTime(searchParams.get("time")));
+  const [customDateRange, setCustomDateRange] = useState<CustomDateRange>(() => ({
+    startDate: searchParams.get("from") ?? "",
+    endDate: searchParams.get("to") ?? "",
+  }));
+
+  const [player, setPlayer] = useState<PlayerDetail | null>(null);
+  const [matches, setMatches] = useState<RankedMatchDetail[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [loadingMatches, setLoadingMatches] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [scoreboardMatchId, setScoreboardMatchId] = useState<string | null>(
+    () => searchParams.get("match")
+  );
+
+  // Match cache — survives filter switches, keyed by filter combo
+  const matchCache = useRef<Map<string, CacheEntry>>(new Map());
+
+  // Friend list from observations
+  const [friendMap, setFriendMap] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    const friends = getFriends();
+    setFriendMap(new Map(friends.map((f: Friend) => [f.puuid, f.gameName])));
+  }, []);
+
+  // Premade detection: co-occurrence analysis + resolved names
+  const [resolvedNames, setResolvedNames] = useState<Map<string, string>>(new Map());
+  const resolvedPuuids = useRef<Set<string>>(new Set());
+
+  // Find frequent teammates (2+ games together) from current matches
+  const frequentPuuids = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of matches) {
+      for (const tp of m.teammatePuuids) {
+        counts.set(tp, (counts.get(tp) ?? 0) + 1);
+      }
+    }
+    const result = new Set<string>();
+    for (const [p, count] of counts) {
+      if (count >= 2) result.add(p);
+    }
+    return result;
+  }, [matches]);
+
+  // Resolve names for frequent teammates we haven't resolved yet
+  useEffect(() => {
+    const toResolve = [...frequentPuuids].filter(
+      (p) => !friendMap.has(p) && !resolvedPuuids.current.has(p)
+    );
+    if (toResolve.length === 0) return;
+
+    // Mark as in-flight so we don't re-request
+    for (const p of toResolve) resolvedPuuids.current.add(p);
+
+    let cancelled = false;
+    resolveAccountNames(toResolve, region)
+      .then((resolved) => {
+        if (cancelled) return;
+        setResolvedNames((prev) => {
+          const next = new Map(prev);
+          for (const [p, acct] of Object.entries(resolved)) {
+            next.set(p, acct.gameName);
+          }
+          return next;
+        });
+      })
+      .catch((err) => checkRateLimit(err));
+
+    return () => { cancelled = true; };
+  }, [frequentPuuids, friendMap]);
+
+  // Combined map: friends + resolved frequent teammates
+  const knownPlayersMap = useMemo(() => {
+    const combined = new Map(friendMap);
+    for (const [p, name] of resolvedNames) {
+      if (!combined.has(p)) combined.set(p, name);
+    }
+    return combined;
+  }, [friendMap, resolvedNames]);
+
+  const requestId = useRef(0);
+
+  // ---- helpers ----
+
+  const updateUrl = useCallback((q: QueueFilter, tr: TimeRangeFilter, custom?: CustomDateRange, loaded?: number) => {
+    const params = new URLSearchParams();
+    if (region !== "eun1") params.set("region", region);
+    if (q !== "all") params.set("queue", q);
+    if (tr !== "all") params.set("time", tr);
+    if (tr === "custom" && custom?.startDate) params.set("from", custom.startDate);
+    if (tr === "custom" && custom?.endDate) params.set("to", custom.endDate);
+    if (loaded && loaded > 50) params.set("loaded", String(loaded));
+    const qs = params.toString();
+    router.replace(`?${qs}`, { scroll: false });
+  }, [router, region]);
+
+  // Load profile on mount
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const detail = await fetchPlayerDetail(puuid, region);
+        if (!cancelled) setPlayer(detail);
+      } catch (err) {
+        checkRateLimit(err);
+        if (!cancelled) setError("Nie udało się załadować profilu gracza");
+      } finally {
+        if (!cancelled) setLoadingProfile(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [puuid]);
+
+  // Fetch a single page of matches from the server
+  const fetchPage = useCallback(async (
+    q: QueueFilter,
+    tr: TimeRangeFilter,
+    customRange: CustomDateRange | undefined,
+    start: number
+  ) => {
+    const opts: { start?: number; startTime?: number; endTime?: number } = { start };
+    if (tr === "custom" && customRange?.startDate && customRange?.endDate) {
+      opts.startTime = dateToEpochSeconds(customRange.startDate);
+      opts.endTime = dateToEpochSeconds(customRange.endDate) + 86400;
+    }
+    return fetchRankedMatches(puuid, q, tr, opts);
+  }, [puuid]);
+
+  // Fetch matches — checks cache first, updates cache on response
+  // When `targetCount` > 50, fetches multiple pages sequentially (for restoring pagination on refresh)
+  const fetchMatches = useCallback(async (
+    q: QueueFilter,
+    tr: TimeRangeFilter,
+    customRange?: CustomDateRange,
+    start: number = 0,
+    targetCount: number = 50
+  ) => {
+    const key = cacheKey(q, tr, customRange);
+    const isLoadMore = start > 0;
+
+    // If not loading more and cache has data, restore instantly
+    if (!isLoadMore) {
+      const cached = matchCache.current.get(key);
+      if (cached) {
+        setMatches(cached.matches);
+        setHasMore(cached.hasMore);
+        setLoadingMatches(false);
+        return;
+      }
+    }
+
+    const id = ++requestId.current;
+    if (!isLoadMore) {
+      setLoadingMatches(true);
+    } else {
+      setLoadingMore(true);
+    }
+
+    try {
+      // Fetch pages until we have targetCount matches or run out
+      let accumulated: RankedMatchDetail[] = isLoadMore
+        ? (matchCache.current.get(key)?.matches ?? [])
+        : [];
+      let currentStart = start;
+      let moreAvailable = true;
+
+      while (accumulated.length < (isLoadMore ? start + targetCount : targetCount) && moreAvailable) {
+        if (requestId.current !== id) return;
+        const result = await fetchPage(q, tr, customRange, currentStart);
+        if (requestId.current !== id) return;
+
+        accumulated = [...accumulated, ...result.matches];
+        moreAvailable = result.hasMore;
+        currentStart += 50;
+      }
+
+      // Update cache + state
+      matchCache.current.set(key, { matches: accumulated, hasMore: moreAvailable });
+      setMatches(accumulated);
+      setHasMore(moreAvailable);
+
+      // Persist loaded count in URL
+      updateUrl(q, tr, customRange, accumulated.length);
+    } catch (err) {
+      checkRateLimit(err);
+      if (requestId.current !== id) return;
+      if (!isLoadMore) {
+        setMatches([]);
+        setHasMore(false);
+      }
+    } finally {
+      if (requestId.current !== id) return;
+      setLoadingMatches(false);
+      setLoadingMore(false);
+    }
+  }, [puuid, fetchPage, updateUrl]);
+
+  // Initial fetch on mount — uses filters from URL (or defaults)
+  const initialFetched = useRef(false);
+  useEffect(() => {
+    if (initialFetched.current) return;
+    initialFetched.current = true;
+
+    const restoredCount = Math.max(50, parseInt(searchParams.get("loaded") ?? "50", 10) || 50);
+
+    if (timeRange === "custom" && customDateRange.startDate && customDateRange.endDate) {
+      fetchMatches(queue, timeRange, customDateRange, 0, restoredCount);
+    } else if (timeRange !== "custom") {
+      fetchMatches(queue, timeRange, undefined, 0, restoredCount);
+    } else {
+      fetchMatches("all", "all");
+    }
+  }, [fetchMatches, queue, timeRange, customDateRange, searchParams]);
+
+  // ---- filter handlers ----
+
+  const handleQueueChange = useCallback((q: QueueFilter) => {
+    setQueue(q);
+    updateUrl(q, timeRange, customDateRange);
+    fetchMatches(q, timeRange, customDateRange);
+  }, [timeRange, customDateRange, fetchMatches, updateUrl]);
+
+  const handleTimeRangeChange = useCallback((tr: TimeRangeFilter) => {
+    setTimeRange(tr);
+    updateUrl(queue, tr, customDateRange);
+    if (tr !== "custom") {
+      fetchMatches(queue, tr);
+    }
+  }, [queue, customDateRange, fetchMatches, updateUrl]);
+
+  const handleCustomDateChange = useCallback((range: CustomDateRange) => {
+    setCustomDateRange(range);
+    updateUrl(queue, "custom", range);
+    if (range.startDate && range.endDate) {
+      fetchMatches(queue, "custom", range);
+    }
+  }, [queue, fetchMatches, updateUrl]);
+
+  const handleLoadMore = useCallback(() => {
+    fetchMatches(queue, timeRange, customDateRange, matches.length, 50);
+  }, [queue, timeRange, customDateRange, matches.length, fetchMatches]);
+
+  // Filtered matches (currently identity — server handles all filtering)
+  const filteredMatches = useMemo(() => matches, [matches]);
+
+  // Compute chart data
+  const chartData = useMemo(() => {
+    if (!player) return [];
+    const rank = queue === "flex" ? player.flexRank : (player.soloRank ?? player.flexRank);
+    return estimateRankProgression(rank, filteredMatches);
+  }, [player, queue, filteredMatches]);
+
+  if (loadingProfile) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)]">
+        <div className="w-8 h-8 border-2 border-gold-dark border-t-gold-primary rounded-full animate-spin mb-4" />
+        <p className="text-text-muted text-sm uppercase tracking-wider" style={{ fontFamily: "var(--font-display)" }}>
+          Ładowanie profilu...
+        </p>
+      </div>
+    );
+  }
+
+  if (error || !player) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] text-center">
+        <h1
+          className="text-5xl sm:text-6xl font-bold text-gold-primary mb-2"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          Błąd
+        </h1>
+        <h2
+          className="text-xl font-bold text-text-primary mb-2"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          {error ?? "Nie udało się załadować profilu gracza"}
+        </h2>
+        <p className="text-text-muted text-sm mb-6">
+          Sprawdź identyfikator gracza lub spróbuj ponownie później.
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={() => window.location.reload()}
+            className="inline-block px-4 py-2 bg-gold-dark/40 border border-gold-secondary/60 text-gold-bright text-sm uppercase tracking-wider rounded hover:bg-gold-dark/60 transition-colors cursor-pointer"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Spróbuj ponownie
+          </button>
+          <a
+            href="/"
+            className="inline-block px-4 py-2 bg-gold-dark/40 border border-gold-secondary/60 text-gold-bright text-sm uppercase tracking-wider rounded hover:bg-gold-dark/60 transition-colors"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Strona główna
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <PlayerHeader player={player} region={region} />
+
+      <div className="lol-divider mb-6" />
+
+      {/* Filters */}
+      <RankFilters
+        queue={queue}
+        timeRange={timeRange}
+        customDateRange={customDateRange}
+        onQueueChange={handleQueueChange}
+        onTimeRangeChange={handleTimeRangeChange}
+        onCustomDateChange={handleCustomDateChange}
+      />
+
+      {/* Chart — only show when rank data exists */}
+      {(loadingMatches || chartData.length > 0) && (
+        <div className="mb-6">
+          <h3
+            className="text-gold-primary text-sm font-semibold uppercase tracking-widest mb-3"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Progresja rangi
+          </h3>
+          {loadingMatches ? (
+            <div className="flex items-center justify-center h-[200px] border border-gold-dark/20 bg-bg-secondary/30 rounded">
+              <div className="w-5 h-5 border-2 border-gold-dark border-t-gold-primary rounded-full animate-spin" />
+            </div>
+          ) : (
+            <RankChart dataPoints={chartData} friendMap={knownPlayersMap} onMatchClick={(matchId) => setScoreboardMatchId(matchId)} />
+          )}
+        </div>
+      )}
+
+      {/* Stats summary */}
+      {!loadingMatches && <MatchStatsSummary matches={filteredMatches} ddVersion={player.ddVersion} />}
+
+      {/* Champion stats */}
+      {!loadingMatches && <ChampionStats matches={filteredMatches} ddVersion={player.ddVersion} />}
+
+      {/* Frequent teammates */}
+      {!loadingMatches && <FrequentTeammates matches={filteredMatches} playerPuuid={puuid} ddVersion={player.ddVersion} />}
+
+      {/* Match history */}
+      {!loadingMatches && (
+        <MatchHistoryTable
+          matches={filteredMatches}
+          ddVersion={player.ddVersion}
+          playerPuuid={puuid}
+          friendMap={knownPlayersMap}
+          region={region}
+          rankProgression={chartData}
+          totalLoaded={matches.length}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          onLoadMore={handleLoadMore}
+        />
+      )}
+      {scoreboardMatchId && (
+        <ScoreboardModal
+          matchId={scoreboardMatchId}
+          playerPuuid={puuid}
+          knownPlayersMap={knownPlayersMap}
+          region={region}
+          onClose={() => {
+            setScoreboardMatchId(null);
+            // Remove match param from URL so it doesn't re-open on refresh
+            const params = new URLSearchParams(window.location.search);
+            if (params.has("match")) {
+              params.delete("match");
+              const qs = params.toString();
+              router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false });
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}

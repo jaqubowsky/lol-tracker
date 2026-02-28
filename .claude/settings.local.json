@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:developer.riotgames.com)",
+      "WebFetch(domain:x.com)",
+      "WebFetch(domain:darkintaqt.com)",
+      "WebFetch(domain:ddragon.leagueoflegends.com)",
+      "Bash(npx create-next-app@latest:*)",
+      "Bash(npm install:*)",
+      "Bash(npm ls:*)",
+      "Bash(source .env:*)",
+      "Bash(npm run:*)",
+      "Bash(npx next:*)",
+      "WebFetch(domain:aj-r.github.io)",
+      "Bash(rm:*)",
+      "Bash(ls:*)",
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:mobalytics.gg)"
+    ]
+  }
+}
