@@ -52,9 +52,9 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [pinnedPuuids, setPinnedPuuids] = useState<string[]>([]);
   const [rankChanges, setRankChanges] = useState<Record<string, "up" | "down" | null>>({});
+  const [initialLoaded, setInitialLoaded] = useState(false);
   const friendsRef = useRef<Friend[]>([]);
   const refreshingRef = useRef(false);
-  const initialRefreshDone = useRef(false);
 
   // Keep ref in sync for interval callback
   useEffect(() => {
@@ -98,7 +98,6 @@ export default function Home() {
       try {
         const result = await fullRefreshFriends(friendList);
         applyResult(result);
-        initialRefreshDone.current = true;
         if (result.rateLimited) {
           checkRateLimit(new Error(RATE_LIMIT_MARKER));
         }
@@ -109,6 +108,7 @@ export default function Home() {
         );
       } finally {
         setLoading(false);
+        setInitialLoaded(true);
         refreshingRef.current = false;
       }
     },
@@ -146,13 +146,15 @@ export default function Home() {
     setHydrated(true);
     if (stored.length > 0) {
       doFullRefresh(stored);
+    } else {
+      setInitialLoaded(true);
     }
   }, [doFullRefresh]);
 
   // Light poll every 30s — only after initial refresh is done
   useEffect(() => {
     const interval = setInterval(() => {
-      if (initialRefreshDone.current) {
+      if (initialLoaded) {
         doPoll(friendsRef.current);
       }
     }, POLL_INTERVAL);
@@ -202,6 +204,28 @@ export default function Home() {
     saveFriends(merged);
     setFriends(merged);
     doFullRefresh(merged);
+  }
+
+  if (!initialLoaded) {
+    return (
+      <main className="flex flex-col items-center justify-center min-h-[60dvh]">
+        <div className="lol-divider max-w-xs mx-auto mb-6" />
+        <h1
+          className="text-3xl sm:text-4xl font-bold tracking-[0.1em] uppercase gold-shimmer mb-4"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          LoL Tracker
+        </h1>
+        <div className="flex items-center gap-2 text-text-secondary text-sm tracking-wider uppercase">
+          <svg className="w-4 h-4 animate-spin text-gold-primary" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.25" />
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          Ładowanie...
+        </div>
+        <div className="lol-divider max-w-xs mx-auto mt-6" />
+      </main>
+    );
   }
 
   return (

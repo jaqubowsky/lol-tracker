@@ -42,7 +42,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pl">
-      <body className={`${cinzel.variable} ${firaSans.variable} bg-bg-primary text-text-primary min-h-screen relative flex flex-col`}>
+      <body className={`${cinzel.variable} ${firaSans.variable} bg-bg-primary text-text-primary min-h-dvh relative flex flex-col`}>
         <div className="relative z-10 flex-1">
           {children}
         </div>
