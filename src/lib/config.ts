@@ -20,7 +20,7 @@ export function getPlatformUrl(region: Region): string {
   return `https://${region}.api.riotgames.com`;
 }
 
-export const POLL_INTERVAL = 30000;
+export const POLL_INTERVAL = 60000;
 
 export const RATE_LIMIT_PER_SECOND = 15;
 export const RATE_LIMIT_PER_TWO_MINUTES = 80;

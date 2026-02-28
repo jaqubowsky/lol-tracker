@@ -261,6 +261,60 @@ body::before {
   animation: scoreboardSlideUp 0.3s ease-out;
 }
 
+/* Music player */
+@keyframes musicPlayerEnter {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.music-player-enter {
+  animation: musicPlayerEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Force YT iframe to fill container */
+.yt-iframe-fill iframe {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Transport buttons */
+.music-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--color-text-secondary);
+  transition: color 0.2s, transform 0.15s;
+}
+.music-btn:hover:not(:disabled) {
+  color: var(--color-gold-primary);
+  transform: scale(1.1);
+}
+.music-btn:active:not(:disabled) { transform: scale(0.95); }
+
+.music-btn-sm {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  transition: transform 0.15s;
+}
+.music-btn-sm:hover:not(:disabled) { transform: scale(1.15); }
+.music-btn-sm:active:not(:disabled) { transform: scale(0.9); }
+
+.music-btn-play {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 4px;
+  transition: transform 0.15s;
+}
+.music-btn-play:hover:not(:disabled) { transform: scale(1.08); }
+.music-btn-play:active:not(:disabled) { transform: scale(0.95); }
+
 /* Respect reduced-motion preference */
 @media (prefers-reduced-motion: reduce) {
   .scan-line::after,
@@ -268,7 +322,8 @@ body::before {
   .status-pulse,
   .card-reveal,
   .scoreboard-backdrop,
-  .scoreboard-panel {
+  .scoreboard-panel,
+  .music-player-enter {
     animation: none !important;
   }
 }

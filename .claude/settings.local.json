@@ -17,7 +17,9 @@
       "Bash(ls:*)",
       "Bash(npx tsc:*)",
       "WebFetch(domain:mobalytics.gg)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(gh api:*)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

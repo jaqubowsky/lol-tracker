@@ -171,10 +171,10 @@ const championMasterySchema = z.object({
 // Revalidation durations (seconds) for Next.js Data Cache
 // ---------------------------------------------------------------------------
 const REVALIDATE_IMMUTABLE = 3600;  // 1h — match details never change
-const REVALIDATE_PROFILE = 600;     // 10min — account/summoner data
-const REVALIDATE_RANK = 120;        // 2min — rank changes after games
+const REVALIDATE_PROFILE = 1800;    // 30min — profile icons/level rarely change
+const REVALIDATE_RANK = 300;        // 5min — rank only changes after a game ends
 const REVALIDATE_MASTERY = 300;     // 5min — mastery changes slowly
-const REVALIDATE_MATCH_LIST = 60;   // 1min — new games appear
+const REVALIDATE_MATCH_LIST = 300;  // 5min — matches don't appear that fast
 // Spectator: no cache (must be real-time)
 
 // ---------------------------------------------------------------------------
