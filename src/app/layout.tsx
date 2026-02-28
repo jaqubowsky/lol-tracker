@@ -17,21 +17,50 @@ const firaSans = Fira_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "LoL Tracker",
+    default: "LoL Tracker — Sprawdź kto gra",
     template: "%s | LoL Tracker",
   },
-  description: "Sprawdź kto gra — live tracker dla znajomych z League of Legends",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_URL || "https://localhost:3000"),
+  description:
+    "Śledź znajomych w League of Legends na żywo. Sprawdzaj rangi, aktualne mecze i historie gier — EUNE i EUW.",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_URL || "https://localhost:3000"
+  ),
+  keywords: [
+    "League of Legends",
+    "LoL",
+    "tracker",
+    "live game",
+    "EUNE",
+    "EUW",
+    "rangi",
+    "sprawdź kto gra",
+  ],
+  authors: [{ name: "jaqubowsky", url: "https://github.com/jaqubowsky" }],
+  creator: "jaqubowsky",
   openGraph: {
-    title: "LoL Tracker",
-    description: "Sprawdź kto gra — live tracker dla znajomych z League of Legends",
+    title: "LoL Tracker — Sprawdź kto gra",
+    description:
+      "Śledź znajomych w League of Legends na żywo. Rangi, live game, historia meczy — wszystko w jednym miejscu.",
     type: "website",
     locale: "pl_PL",
+    siteName: "LoL Tracker",
   },
   twitter: {
-    card: "summary",
-    title: "LoL Tracker",
-    description: "Sprawdź kto gra — live tracker dla znajomych z League of Legends",
+    card: "summary_large_image",
+    title: "LoL Tracker — Sprawdź kto gra",
+    description:
+      "Śledź znajomych w League of Legends na żywo. Rangi, live game, historia meczy.",
+  },
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512x512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-icon.png",
+  },
+  other: {
+    "theme-color": "#010a13",
   },
 };
 
