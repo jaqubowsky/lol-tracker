@@ -1,12 +1,14 @@
-export const RIOT_API_KEY = process.env.RIOT_API_KEY ?? "";
-
-if (!RIOT_API_KEY && process.env.NODE_ENV === "production") {
-  throw new Error(
-    "RIOT_API_KEY is not set — add it to your environment variables before deploying"
-  );
-}
-if (!RIOT_API_KEY) {
-  console.warn("[config] RIOT_API_KEY is not set in environment variables");
+export function getRiotApiKey(): string {
+  const key = process.env.RIOT_API_KEY ?? "";
+  if (!key && process.env.NODE_ENV === "production") {
+    throw new Error(
+      "RIOT_API_KEY is not set — add it to your environment variables before deploying"
+    );
+  }
+  if (!key) {
+    console.warn("[config] RIOT_API_KEY is not set in environment variables");
+  }
+  return key;
 }
 
 import type { Region } from "@/utils/types";

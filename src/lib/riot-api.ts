@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Region } from "@/utils/types";
 import {
-  RIOT_API_KEY,
+  getRiotApiKey,
   REGIONAL_URL,
   getPlatformUrl,
 } from "./config";
@@ -24,14 +24,15 @@ async function riotFetch(
   options: { revalidate?: number; tags?: string[] } = {},
   retryCount: number = 0
 ): Promise<Response> {
-  if (!RIOT_API_KEY) {
+  const apiKey = getRiotApiKey();
+  if (!apiKey) {
     throw new Error("Brak klucza API — ustaw RIOT_API_KEY w pliku .env.local");
   }
 
   const url = `${baseUrl}${path}`;
 
   const fetchInit: RequestInit & { next?: { revalidate?: number; tags?: string[] } } = {
-    headers: { "X-Riot-Token": RIOT_API_KEY },
+    headers: { "X-Riot-Token": apiKey },
   };
 
   if (options.revalidate !== undefined) {
