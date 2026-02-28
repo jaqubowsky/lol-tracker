@@ -189,31 +189,31 @@ export function PlayerDetailPage({ puuid }: PlayerDetailPageProps) {
     return () => { cancelled = true; };
   }, [puuid]);
 
-  // Fetch a single page of matches from the server
+  // Fetch a single page of matches from the server — always "all" queue + time,
+  // except custom date ranges which need server-side startTime/endTime.
   const fetchPage = useCallback(async (
-    q: QueueFilter,
-    tr: TimeRangeFilter,
     customRange: CustomDateRange | undefined,
     start: number
   ) => {
     const opts: { start?: number; startTime?: number; endTime?: number } = { start };
-    if (tr === "custom" && customRange?.startDate && customRange?.endDate) {
+    if (customRange?.startDate && customRange?.endDate) {
       opts.startTime = dateToEpochSeconds(customRange.startDate);
       opts.endTime = dateToEpochSeconds(customRange.endDate) + 86400;
     }
-    return fetchRankedMatches(puuid, q, tr, opts);
+    // Always fetch all queues + all time from server; client filters the rest
+    return fetchRankedMatches(puuid, "all", "all", opts);
   }, [puuid]);
 
-  // Fetch matches — checks cache first, updates cache on response
-  // When `targetCount` > 50, fetches multiple pages sequentially (for restoring pagination on refresh)
+  // Fetch matches — always fetches the broadest dataset from the server.
+  // Queue + preset time filtering is done client-side via `filteredMatches`.
   const fetchMatches = useCallback(async (
-    q: QueueFilter,
-    tr: TimeRangeFilter,
     customRange?: CustomDateRange,
     start: number = 0,
     targetCount: number = 50
   ) => {
-    const key = cacheKey(q, tr, customRange);
+    const key = customRange?.startDate && customRange?.endDate
+      ? `custom|${customRange.startDate}|${customRange.endDate}`
+      : "all";
     const isLoadMore = start > 0;
 
     // If not loading more and cache has data, restore instantly
@@ -235,7 +235,6 @@ export function PlayerDetailPage({ puuid }: PlayerDetailPageProps) {
     }
 
     try {
-      // Fetch pages until we have targetCount matches or run out
       let accumulated: RankedMatchDetail[] = isLoadMore
         ? (matchCache.current.get(key)?.matches ?? [])
         : [];
@@ -244,7 +243,7 @@ export function PlayerDetailPage({ puuid }: PlayerDetailPageProps) {
 
       while (accumulated.length < (isLoadMore ? start + targetCount : targetCount) && moreAvailable) {
         if (requestId.current !== id) return;
-        const result = await fetchPage(q, tr, customRange, currentStart);
+        const result = await fetchPage(customRange, currentStart);
         if (requestId.current !== id) return;
 
         accumulated = [...accumulated, ...result.matches];
@@ -252,13 +251,11 @@ export function PlayerDetailPage({ puuid }: PlayerDetailPageProps) {
         currentStart += 50;
       }
 
-      // Update cache + state
       matchCache.current.set(key, { matches: accumulated, hasMore: moreAvailable });
       setMatches(accumulated);
       setHasMore(moreAvailable);
 
-      // Persist loaded count in URL
-      updateUrl(q, tr, customRange, accumulated.length);
+      updateUrl(queue, timeRange, customDateRange, accumulated.length);
     } catch (err) {
       checkRateLimit(err);
       if (requestId.current !== id) return;
@@ -271,9 +268,9 @@ export function PlayerDetailPage({ puuid }: PlayerDetailPageProps) {
       setLoadingMatches(false);
       setLoadingMore(false);
     }
-  }, [puuid, fetchPage, updateUrl]);
+  }, [puuid, fetchPage, updateUrl, queue, timeRange, customDateRange]);
 
-  // Initial fetch on mount — uses filters from URL (or defaults)
+  // Initial fetch on mount
   const initialFetched = useRef(false);
   useEffect(() => {
     if (initialFetched.current) return;
@@ -282,44 +279,68 @@ export function PlayerDetailPage({ puuid }: PlayerDetailPageProps) {
     const restoredCount = Math.max(50, parseInt(searchParams.get("loaded") ?? "50", 10) || 50);
 
     if (timeRange === "custom" && customDateRange.startDate && customDateRange.endDate) {
-      fetchMatches(queue, timeRange, customDateRange, 0, restoredCount);
-    } else if (timeRange !== "custom") {
-      fetchMatches(queue, timeRange, undefined, 0, restoredCount);
+      fetchMatches(customDateRange, 0, restoredCount);
     } else {
-      fetchMatches("all", "all");
+      fetchMatches(undefined, 0, restoredCount);
     }
-  }, [fetchMatches, queue, timeRange, customDateRange, searchParams]);
+  }, [fetchMatches, timeRange, customDateRange, searchParams]);
 
   // ---- filter handlers ----
+  // Queue + preset time changes are instant (client-side only, no server fetch).
+  // Only custom date ranges trigger a server fetch.
 
   const handleQueueChange = useCallback((q: QueueFilter) => {
     setQueue(q);
     updateUrl(q, timeRange, customDateRange);
-    fetchMatches(q, timeRange, customDateRange);
-  }, [timeRange, customDateRange, fetchMatches, updateUrl]);
+  }, [timeRange, customDateRange, updateUrl]);
 
   const handleTimeRangeChange = useCallback((tr: TimeRangeFilter) => {
     setTimeRange(tr);
     updateUrl(queue, tr, customDateRange);
-    if (tr !== "custom") {
-      fetchMatches(queue, tr);
-    }
-  }, [queue, customDateRange, fetchMatches, updateUrl]);
+  }, [queue, customDateRange, updateUrl]);
 
   const handleCustomDateChange = useCallback((range: CustomDateRange) => {
     setCustomDateRange(range);
     updateUrl(queue, "custom", range);
     if (range.startDate && range.endDate) {
-      fetchMatches(queue, "custom", range);
+      fetchMatches(range);
     }
   }, [queue, fetchMatches, updateUrl]);
 
   const handleLoadMore = useCallback(() => {
-    fetchMatches(queue, timeRange, customDateRange, matches.length, 50);
-  }, [queue, timeRange, customDateRange, matches.length, fetchMatches]);
+    const customRange = timeRange === "custom" ? customDateRange : undefined;
+    fetchMatches(customRange, matches.length, 50);
+  }, [timeRange, customDateRange, matches.length, fetchMatches]);
 
-  // Filtered matches (currently identity — server handles all filtering)
-  const filteredMatches = useMemo(() => matches, [matches]);
+  // Client-side filtering as safety net (server may return cached/broader data)
+  const filteredMatches = useMemo(() => {
+    let result = matches;
+
+    // Queue filter
+    if (queue === "solo") {
+      result = result.filter((m) => m.queueId === 420);
+    } else if (queue === "flex") {
+      result = result.filter((m) => m.queueId === 440);
+    }
+
+    // Time range filter
+    if (timeRange === "custom") {
+      if (customDateRange.startDate) {
+        const startMs = new Date(customDateRange.startDate).getTime();
+        result = result.filter((m) => m.gameCreation >= startMs);
+      }
+      if (customDateRange.endDate) {
+        const endMs = new Date(customDateRange.endDate).getTime() + 86400000;
+        result = result.filter((m) => m.gameCreation < endMs);
+      }
+    } else if (timeRange !== "all") {
+      const days = timeRange === "7d" ? 7 : timeRange === "14d" ? 14 : 30;
+      const cutoff = Date.now() - days * 86400000;
+      result = result.filter((m) => m.gameCreation >= cutoff);
+    }
+
+    return result;
+  }, [matches, queue, timeRange, customDateRange]);
 
   // Compute chart data
   const chartData = useMemo(() => {
