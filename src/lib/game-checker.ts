@@ -17,7 +17,7 @@ function stripHtml(html: string): string {
 
 // Module-scope maps (populated from DDragon, cached via Next.js Data Cache)
 let championMap: Record<number, string> = {};
-let spellMap: Record<number, string> = {};
+let spellMap: Record<number, { id: string; name: string; description: string }> = {};
 let runeMap: Record<number, { name: string; icon: string }> = {};
 let runeTreesMap: Record<number, RuneTreeInfo> = {};
 let itemMap: Record<number, { name: string; description: string }> = {};
@@ -56,7 +56,7 @@ async function _loadStaticData(): Promise<string> {
     fetch(`${DDRAGON_URL}/cdn/${version}/data/en_US/champion.json`, {
       next: { revalidate: 86400 },
     }),
-    fetch(`${DDRAGON_URL}/cdn/${version}/data/en_US/summoner.json`, {
+    fetch(`${DDRAGON_URL}/cdn/${version}/data/pl_PL/summoner.json`, {
       next: { revalidate: 86400 },
     }),
     fetch(`${DDRAGON_URL}/cdn/${version}/data/pl_PL/runesReforged.json`, {
@@ -90,12 +90,18 @@ async function _loadStaticData(): Promise<string> {
   championMap = newChampionMap;
 
   const spellData = await spellRes.json();
-  const newSpellMap: Record<number, string> = {};
+  const newSpellMap: Record<number, { id: string; name: string; description: string }> = {};
   for (const spell of Object.values(spellData.data) as Array<{
     key: string;
     id: string;
+    name: string;
+    description: string;
   }>) {
-    newSpellMap[parseInt(spell.key, 10)] = spell.id;
+    newSpellMap[parseInt(spell.key, 10)] = {
+      id: spell.id,
+      name: spell.name,
+      description: stripHtml(spell.description),
+    };
   }
   spellMap = newSpellMap;
 
@@ -172,7 +178,11 @@ export function getChampionName(championId: number): string {
 }
 
 export function getSpellName(spellId: number): string {
-  return spellMap[spellId] ?? "Unknown";
+  return spellMap[spellId]?.id ?? "Unknown";
+}
+
+export function getSpellInfo(spellId: number): { id: string; name: string; description: string } | null {
+  return spellMap[spellId] ?? null;
 }
 
 export function getRuneIcon(runeId: number): string {
@@ -205,7 +215,21 @@ export async function checkFriendGameStatus(
   );
 
   if (!participant) {
-    return { inGame: false, gameInfo: null };
+    // API returned a game (not 404), so the player IS in-game
+    // but puuid might be anonymized — return limited info
+    return {
+      inGame: true,
+      gameInfo: {
+        gameId: game.gameId,
+        championId: 0,
+        championName: "Unknown",
+        gameMode: game.gameMode,
+        gameStartTime: game.gameStartTime,
+        spell1Id: 0,
+        spell2Id: 0,
+        teamId: 0,
+      },
+    };
   }
 
   const championName = getChampionName(participant.championId);

@@ -1,7 +1,7 @@
 "use server";
 
 import { getActiveGame, getAccountByPuuid, getRankedEntries } from "@/lib/riot-api";
-import { loadStaticData, getChampionName, getSpellName, getRuneIcon, getRuneName, getRuneTree } from "@/lib/game-checker";
+import { loadStaticData, getChampionName, getSpellName, getSpellInfo, getRuneIcon, getRuneName, getRuneTree } from "@/lib/game-checker";
 import { API_BATCH_SIZE } from "@/lib/config";
 import type { LiveGameData, LiveGameParticipant, RankInfo, ParticipantPerks, RuneTreeInfo, Region } from "@/utils/types";
 
@@ -11,6 +11,7 @@ export async function fetchLiveGame(puuid: string, region: Region = "eun1"): Pro
   runeIconMap: Record<number, string>;
   runeNameMap: Record<number, string>;
   runeTreesData: Record<number, RuneTreeInfo>;
+  spellInfoMap: Record<string, { name: string; description: string }>;
 } | null> {
   const [game, ddVersion] = await Promise.all([
     getActiveGame(puuid, region),
@@ -23,6 +24,7 @@ export async function fetchLiveGame(puuid: string, region: Region = "eun1"): Pro
   const participants: LiveGameParticipant[] = [];
   const usedRuneIds = new Set<number>();
   const usedTreeIds = new Set<number>();
+  const usedSpellIds = new Set<number>();
 
   for (let i = 0; i < game.participants.length; i += BATCH_SIZE) {
     const batch = game.participants.slice(i, i + BATCH_SIZE);
@@ -58,22 +60,30 @@ export async function fetchLiveGame(puuid: string, region: Region = "eun1"): Pro
         }
 
         let perks: ParticipantPerks | null = null;
-        if (p.perks && p.perks.perkIds.length >= 6) {
+        if (p.perks) {
+          const ids = p.perks.perkIds;
           perks = {
             primaryStyleId: p.perks.perkStyle,
             subStyleId: p.perks.perkSubStyle,
-            primarySelections: p.perks.perkIds.slice(0, 4),
-            subSelections: p.perks.perkIds.slice(4, 6),
-            statOffense: p.perks.perkIds[6] ?? 0,
-            statFlex: p.perks.perkIds[7] ?? 0,
-            statDefense: p.perks.perkIds[8] ?? 0,
+            primarySelections: ids.slice(0, 4),
+            subSelections: ids.slice(4, 6),
+            statOffense: ids[6] ?? 0,
+            statFlex: ids[7] ?? 0,
+            statDefense: ids[8] ?? 0,
           };
-          usedRuneIds.add(p.perks.perkStyle);
-          usedRuneIds.add(p.perks.perkSubStyle);
-          usedTreeIds.add(p.perks.perkStyle);
-          usedTreeIds.add(p.perks.perkSubStyle);
-          for (const id of p.perks.perkIds.slice(0, 9)) usedRuneIds.add(id);
+          if (p.perks.perkStyle) {
+            usedRuneIds.add(p.perks.perkStyle);
+            usedTreeIds.add(p.perks.perkStyle);
+          }
+          if (p.perks.perkSubStyle) {
+            usedRuneIds.add(p.perks.perkSubStyle);
+            usedTreeIds.add(p.perks.perkSubStyle);
+          }
+          for (const id of ids) usedRuneIds.add(id);
         }
+
+        usedSpellIds.add(p.spell1Id);
+        usedSpellIds.add(p.spell2Id);
 
         return {
           puuid: p.puuid,
@@ -106,6 +116,12 @@ export async function fetchLiveGame(puuid: string, region: Region = "eun1"): Pro
     if (tree) runeTreesData[treeId] = tree;
   }
 
+  const spellInfoMap: Record<string, { name: string; description: string }> = {};
+  for (const id of usedSpellIds) {
+    const info = getSpellInfo(id);
+    if (info) spellInfoMap[info.id] = { name: info.name, description: info.description };
+  }
+
   return {
     data: {
       gameId: game.gameId,
@@ -117,5 +133,6 @@ export async function fetchLiveGame(puuid: string, region: Region = "eun1"): Pro
     runeIconMap,
     runeNameMap,
     runeTreesData,
+    spellInfoMap,
   };
 }

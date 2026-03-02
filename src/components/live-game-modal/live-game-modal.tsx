@@ -6,7 +6,8 @@ import Image from "next/image";
 import { fetchLiveGame } from "./action";
 import { resolveFriend } from "@/components/add-friend-form/action";
 import { checkRateLimit } from "@/utils/rate-limit-event";
-import { getFriends, addFriend as storageAddFriend } from "@/utils/storage";
+import { getFriends, addFriend as storageAddFriend, removeFriend as storageRemoveFriend } from "@/utils/storage";
+import { Tooltip } from "@/components/tooltip";
 import { GameTimer } from "@/components/game-timer";
 import { getTierColorClass } from "@/lib/rank-utils";
 import type { LiveGameData, LiveGameParticipant, Region, RuneTreeInfo } from "@/utils/types";
@@ -37,8 +38,10 @@ function TeamSection({
   viewedPuuid,
   addingPuuid,
   onAdd,
+  onRemove,
   runeIconMap,
   onRuneClick,
+  spellInfoMap,
 }: {
   participants: LiveGameParticipant[];
   teamId: number;
@@ -47,8 +50,10 @@ function TeamSection({
   viewedPuuid: string;
   addingPuuid: string | null;
   onAdd: (puuid: string, gameName: string, tagLine: string) => void;
+  onRemove: (puuid: string) => void;
   runeIconMap: Record<number, string>;
   onRuneClick: (p: LiveGameParticipant) => void;
+  spellInfoMap: Record<string, { name: string; description: string }>;
 }) {
   const team = participants.filter((p) => p.teamId === teamId);
   if (team.length === 0) return null;
@@ -70,8 +75,9 @@ function TeamSection({
         {team.map((p) => {
           const isViewed = p.puuid === viewedPuuid;
           const isFriend = friendPuuids.has(p.puuid);
-          const canAdd = !isViewed && !isFriend;
           const isAdding = addingPuuid === p.puuid;
+          const spell1Info = spellInfoMap[p.spell1Name];
+          const spell2Info = spellInfoMap[p.spell2Name];
 
           return (
             <div
@@ -86,8 +92,27 @@ function TeamSection({
                       : "hover:bg-[#ff4a4a]/5 border-l-2 border-l-transparent"
               }`}
             >
-              {/* Add button */}
-              {canAdd && (
+              {/* Add / Remove / Self button */}
+              {isViewed ? (
+                <div
+                  className="shrink-0 w-5 h-5 flex items-center justify-center rounded border border-gold-primary/50 text-gold-primary"
+                  title="Ty"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                    <path d="M12 2l3 7h7l-5.5 4.5L18.5 21 12 17l-6.5 4 2-7.5L2 9h7l3-7z" />
+                  </svg>
+                </div>
+              ) : isFriend ? (
+                <button
+                  onClick={() => onRemove(p.puuid)}
+                  className="shrink-0 w-5 h-5 flex items-center justify-center rounded border border-danger/40 text-danger/60 hover:text-danger hover:border-danger/60 transition-colors cursor-pointer"
+                  title={`Usuń ${p.gameName}`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M5 12h14" />
+                  </svg>
+                </button>
+              ) : (
                 <button
                   onClick={() => onAdd(p.puuid, p.gameName, p.tagLine)}
                   disabled={isAdding}
@@ -118,45 +143,67 @@ function TeamSection({
 
               {/* Spells */}
               <div className="flex flex-col gap-[2px] shrink-0">
-                <div className="w-4 h-4 border border-gold-dark/20">
-                  <Image
-                    src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${p.spell1Name}.png`}
-                    alt={p.spell1Name}
-                    width={16}
-                    height={16}
-                    className="w-full h-full object-cover"
-                    unoptimized
-                  />
-                </div>
-                <div className="w-4 h-4 border border-gold-dark/20">
-                  <Image
-                    src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${p.spell2Name}.png`}
-                    alt={p.spell2Name}
-                    width={16}
-                    height={16}
-                    className="w-full h-full object-cover"
-                    unoptimized
-                  />
-                </div>
+                <Tooltip content={spell1Info ? (
+                  <div className="max-w-[220px]">
+                    <div className="font-bold text-gold-bright text-xs mb-0.5">{spell1Info.name}</div>
+                    <div className="text-text-secondary text-[10px] leading-tight">{spell1Info.description}</div>
+                  </div>
+                ) : null} delay={200}>
+                  <div className="w-4 h-4 border border-gold-dark/20">
+                    <Image
+                      src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${p.spell1Name}.png`}
+                      alt={p.spell1Name}
+                      width={16}
+                      height={16}
+                      className="w-full h-full object-cover"
+                      unoptimized
+                    />
+                  </div>
+                </Tooltip>
+                <Tooltip content={spell2Info ? (
+                  <div className="max-w-[220px]">
+                    <div className="font-bold text-gold-bright text-xs mb-0.5">{spell2Info.name}</div>
+                    <div className="text-text-secondary text-[10px] leading-tight">{spell2Info.description}</div>
+                  </div>
+                ) : null} delay={200}>
+                  <div className="w-4 h-4 border border-gold-dark/20">
+                    <Image
+                      src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${p.spell2Name}.png`}
+                      alt={p.spell2Name}
+                      width={16}
+                      height={16}
+                      className="w-full h-full object-cover"
+                      unoptimized
+                    />
+                  </div>
+                </Tooltip>
               </div>
 
               {/* Rune button (keystone) */}
-              {p.perks && p.perks.primarySelections[0] !== undefined && runeIconMap[p.perks.primarySelections[0]] && (
-                <button
-                  onClick={() => onRuneClick(p)}
-                  className="shrink-0 w-5 h-5 rounded-full border border-gold-dark/30 hover:border-gold-primary/60 transition-colors cursor-pointer overflow-hidden"
-                  title="Pokaż runy"
-                >
-                  <Image
-                    src={`${DDRAGON_IMG}/${runeIconMap[p.perks.primarySelections[0]]}`}
-                    alt="Runy"
-                    width={20}
-                    height={20}
-                    className="w-full h-full object-cover"
-                    unoptimized
-                  />
-                </button>
-              )}
+              {p.perks && (() => {
+                const iconKey = (p.perks!.primarySelections[0] && runeIconMap[p.perks!.primarySelections[0]])
+                  ? p.perks!.primarySelections[0]
+                  : (p.perks!.primaryStyleId && runeIconMap[p.perks!.primaryStyleId])
+                    ? p.perks!.primaryStyleId
+                    : null;
+                if (!iconKey) return null;
+                return (
+                  <button
+                    onClick={() => onRuneClick(p)}
+                    className="shrink-0 w-5 h-5 rounded-full border border-gold-dark/30 hover:border-gold-primary/60 transition-colors cursor-pointer overflow-hidden"
+                    title="Pokaż runy"
+                  >
+                    <Image
+                      src={`${DDRAGON_IMG}/${runeIconMap[iconKey]}`}
+                      alt="Runy"
+                      width={20}
+                      height={20}
+                      className="w-full h-full object-cover"
+                      unoptimized
+                    />
+                  </button>
+                );
+              })()}
 
               {/* Name + champion */}
               <div className="flex flex-col min-w-0 flex-1">
@@ -171,11 +218,6 @@ function TeamSection({
                   <span className="text-text-muted text-[10px]">#{p.tagLine}</span>
                   {isViewed && (
                     <span className="text-[8px] text-gold-primary uppercase tracking-wider">&#x25C0;</span>
-                  )}
-                  {isFriend && !isViewed && (
-                    <span className="shrink-0 text-[8px] text-gold-dark uppercase tracking-wider font-medium">
-                      obserwujesz
-                    </span>
                   )}
                 </div>
                 <span className="text-text-muted text-[10px]">{p.championName}</span>
@@ -205,6 +247,7 @@ export function LiveGameModal({ puuid, region, onClose }: LiveGameModalProps) {
   const [runeNameMap, setRuneNameMap] = useState<Record<number, string>>({});
   const [runeTreesData, setRuneTreesData] = useState<Record<number, RuneTreeInfo>>({});
   const [runePlayer, setRunePlayer] = useState<LiveGameParticipant | null>(null);
+  const [spellInfoMap, setSpellInfoMap] = useState<Record<string, { name: string; description: string }>>({});
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -229,6 +272,15 @@ export function LiveGameModal({ puuid, region, onClose }: LiveGameModalProps) {
     }
   }, []);
 
+  const handleRemoveFriend = useCallback((puuid: string) => {
+    storageRemoveFriend(puuid);
+    setFriendPuuids((prev) => {
+      const next = new Set(prev);
+      next.delete(puuid);
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -244,6 +296,7 @@ export function LiveGameModal({ puuid, region, onClose }: LiveGameModalProps) {
         setRuneIconMap(result.runeIconMap);
         setRuneNameMap(result.runeNameMap);
         setRuneTreesData(result.runeTreesData);
+        setSpellInfoMap(result.spellInfoMap);
       } catch (err) {
         checkRateLimit(err);
         if (!cancelled) setError("Nie udało się pobrać danych o grze");
@@ -331,8 +384,10 @@ export function LiveGameModal({ puuid, region, onClose }: LiveGameModalProps) {
                 viewedPuuid={puuid}
                 addingPuuid={addingPuuid}
                 onAdd={handleAddFriend}
+                onRemove={handleRemoveFriend}
                 runeIconMap={runeIconMap}
                 onRuneClick={setRunePlayer}
+                spellInfoMap={spellInfoMap}
               />
               <div className="lol-divider my-3" />
               <TeamSection
@@ -343,8 +398,10 @@ export function LiveGameModal({ puuid, region, onClose }: LiveGameModalProps) {
                 viewedPuuid={puuid}
                 addingPuuid={addingPuuid}
                 onAdd={handleAddFriend}
+                onRemove={handleRemoveFriend}
                 runeIconMap={runeIconMap}
                 onRuneClick={setRunePlayer}
+                spellInfoMap={spellInfoMap}
               />
             </>
           )}

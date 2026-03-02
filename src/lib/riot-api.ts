@@ -92,7 +92,7 @@ const spectatorParticipantSchema = z.object({
     perkIds: z.array(z.number()).default([]),
     perkStyle: z.number().default(0),
     perkSubStyle: z.number().default(0),
-  }).optional(),
+  }).nullish(),
 });
 
 const spectatorSchema = z.object({

@@ -20,7 +20,9 @@
       "Bash(xargs:*)",
       "Bash(gh api:*)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:leagueoflegends.fandom.com)"
+      "WebFetch(domain:leagueoflegends.fandom.com)",
+      "WebFetch(domain:www.mingweisamuel.com)",
+      "WebFetch(domain:www.riotgames.com)"
     ]
   }
 }

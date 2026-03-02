@@ -6,7 +6,7 @@ import Image from "next/image";
 import { fetchScoreboard } from "./action";
 import { resolveFriend } from "@/components/add-friend-form/action";
 import { checkRateLimit } from "@/utils/rate-limit-event";
-import { getFriends, addFriend as storageAddFriend } from "@/utils/storage";
+import { getFriends, addFriend as storageAddFriend, removeFriend as storageRemoveFriend } from "@/utils/storage";
 import type { ScoreboardData, ScoreboardParticipant, Region, RuneTreeInfo } from "@/utils/types";
 import { partyLabel } from "@/utils/format";
 import { getTierColorClass } from "@/lib/rank-utils";
@@ -44,6 +44,7 @@ function TeamTable({
   knownPlayersMap,
   addingPuuid,
   onAdd,
+  onRemove,
   runeIconMap,
   onRuneClick,
   itemDescMap,
@@ -57,6 +58,7 @@ function TeamTable({
   knownPlayersMap?: Map<string, string>;
   addingPuuid: string | null;
   onAdd: (puuid: string, gameName: string, tagLine: string) => void;
+  onRemove: (puuid: string) => void;
   runeIconMap: Record<number, string>;
   onRuneClick: (p: ScoreboardParticipant) => void;
   itemDescMap: Record<number, string>;
@@ -118,7 +120,6 @@ function TeamTable({
               const isFollowed = friendPuuids.has(p.puuid);
               const isKnownPremade = knownPlayersMap?.has(p.puuid) ?? false;
               const isSelf = p.puuid === playerPuuid;
-              const canAdd = !isSelf && !isFollowed;
               const isAdding = addingPuuid === p.puuid;
               const tagLine = p.riotIdTagline || "";
               const isPremade = !isSelf && isKnownPremade && playerTeamId !== undefined && p.teamId === playerTeamId;
@@ -135,7 +136,26 @@ function TeamTable({
                   {/* Champion + spells + name */}
                   <td className="py-1.5 px-2 overflow-hidden">
                     <div className="flex items-center gap-2">
-                      {canAdd && (
+                      {isSelf ? (
+                        <div
+                          className="shrink-0 w-5 h-5 flex items-center justify-center rounded border border-gold-primary/50 text-gold-primary"
+                          title="Ty"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <path d="M12 2l3 7h7l-5.5 4.5L18.5 21 12 17l-6.5 4 2-7.5L2 9h7l3-7z" />
+                          </svg>
+                        </div>
+                      ) : isFollowed ? (
+                        <button
+                          onClick={() => onRemove(p.puuid)}
+                          className="shrink-0 w-5 h-5 flex items-center justify-center rounded border border-danger/40 text-danger/60 hover:text-danger hover:border-danger/60 transition-colors cursor-pointer"
+                          title={`Usuń ${displayName}`}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M5 12h14" />
+                          </svg>
+                        </button>
+                      ) : (
                         <button
                           onClick={() => onAdd(p.puuid, displayName, tagLine)}
                           disabled={isAdding}
@@ -223,11 +243,6 @@ function TeamTable({
                           </span>
                         )}
                       </div>
-                      {isFollowed && !isSelf && (
-                        <span className="shrink-0 text-[8px] text-gold-dark uppercase tracking-wider font-medium">
-                          obserwujesz
-                        </span>
-                      )}
                       {isPremade && premadeCount > 0 && (
                         <Tooltip content={partyLabel(premadeCount)} delay={200}>
                           <span className="shrink-0 text-blue-bright">
@@ -358,6 +373,15 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
     }
   }, []);
 
+  const handleRemoveFriend = useCallback((puuid: string) => {
+    storageRemoveFriend(puuid);
+    setFriendPuuids((prev) => {
+      const next = new Set(prev);
+      next.delete(puuid);
+      return next;
+    });
+  }, []);
+
   // Fetch data on mount
   useEffect(() => {
     let cancelled = false;
@@ -462,7 +486,6 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
               <TeamTable
                 participants={scoreboard.participants}
                 teamId={100}
-
                 ddVersion={ddVersion}
                 playerPuuid={playerPuuid}
                 playerTeamId={playerTeamId}
@@ -470,6 +493,7 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
                 knownPlayersMap={knownPlayersMap}
                 addingPuuid={addingPuuid}
                 onAdd={handleAddFriend}
+                onRemove={handleRemoveFriend}
                 runeIconMap={runeIconMap}
                 onRuneClick={setRunePlayer}
                 itemDescMap={itemDescMap}
@@ -478,7 +502,6 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
               <TeamTable
                 participants={scoreboard.participants}
                 teamId={200}
-
                 ddVersion={ddVersion}
                 playerPuuid={playerPuuid}
                 playerTeamId={playerTeamId}
@@ -486,6 +509,7 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
                 knownPlayersMap={knownPlayersMap}
                 addingPuuid={addingPuuid}
                 onAdd={handleAddFriend}
+                onRemove={handleRemoveFriend}
                 runeIconMap={runeIconMap}
                 onRuneClick={setRunePlayer}
                 itemDescMap={itemDescMap}

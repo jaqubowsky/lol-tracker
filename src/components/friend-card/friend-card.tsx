@@ -34,14 +34,13 @@ export function FriendCard({
   const profileIconUrl = ddVersion
     ? `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/profileicon/${friend.profileIconId}.png`
     : null;
-  const championSplashUrl =
-    friend.inGame && friend.gameInfo
-      ? `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${friend.gameInfo.championName}_0.jpg`
-      : null;
-  const championIconUrl =
-    friend.inGame && friend.gameInfo && ddVersion
-      ? `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${friend.gameInfo.championName}.png`
-      : null;
+  const hasChampion = friend.inGame && friend.gameInfo && friend.gameInfo.championName !== "Unknown";
+  const championSplashUrl = hasChampion
+    ? `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${friend.gameInfo!.championName}_0.jpg`
+    : null;
+  const championIconUrl = hasChampion && ddVersion
+    ? `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${friend.gameInfo!.championName}.png`
+    : null;
 
   const rankText = friend.rank
     ? `${friend.rank.tier} ${friend.rank.division} — ${friend.rank.lp} LP`
@@ -203,7 +202,7 @@ export function FriendCard({
                 </div>
               )}
               <span className="text-blue-bright text-xs font-semibold tracking-wide">
-                {friend.gameInfo.championName}
+                {friend.gameInfo.championName !== "Unknown" ? friend.gameInfo.championName : "W grze"}
               </span>
               <span className="text-text-muted text-xs">
                 {friend.gameInfo.gameMode}
