@@ -6,6 +6,8 @@ import type { RankedMatchDetail, RankDataPoint, Region } from "@/utils/types";
 import { ScoreboardModal } from "@/components/scoreboard-modal/scoreboard-modal";
 import { partyLabel } from "@/utils/format";
 
+const DDRAGON_IMG = "https://ddragon.leagueoflegends.com/cdn/img";
+
 interface MatchHistoryTableProps {
   matches: RankedMatchDetail[];
   ddVersion: string;
@@ -102,7 +104,7 @@ export function MatchHistoryTable({ matches, ddVersion, playerPuuid, friendMap, 
               key={match.matchId}
               onClick={() => setScoreboardMatchId(match.matchId)}
               className={`
-                flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 transition-colors cursor-pointer
+                flex items-center gap-2 px-2 sm:px-3 py-1.5 transition-colors cursor-pointer
                 ${match.win
                   ? "bg-win/5 border-l-2 border-win/40 hover:bg-win/10"
                   : "bg-loss/5 border-l-2 border-loss/40 hover:bg-loss/10"
@@ -110,7 +112,7 @@ export function MatchHistoryTable({ matches, ddVersion, playerPuuid, friendMap, 
               `}
             >
               {/* W/L + LP indicator */}
-              <div className="flex flex-col items-center shrink-0 w-10">
+              <div className="flex flex-col items-center shrink-0 w-8">
                 <span className={`text-xs font-bold ${match.win ? "text-win" : "text-loss"}`}>
                   {match.win ? "W" : "L"}
                 </span>
@@ -133,17 +135,68 @@ export function MatchHistoryTable({ matches, ddVersion, playerPuuid, friendMap, 
                 />
               </div>
 
-              {/* Champion name */}
-              <span className="text-text-primary text-xs font-medium w-16 sm:w-24 truncate shrink-0">
-                {match.championName}
-              </span>
+              {/* Summoner spells */}
+              <div className="flex flex-col gap-[1px] shrink-0">
+                {match.spell1Name && match.spell1Name !== "Unknown" && (
+                  <div className="w-[14px] h-[14px] border border-gold-dark/20">
+                    <Image
+                      src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${match.spell1Name}.png`}
+                      alt={match.spell1Name}
+                      width={14}
+                      height={14}
+                      className="w-full h-full object-cover"
+                      unoptimized
+                    />
+                  </div>
+                )}
+                {match.spell2Name && match.spell2Name !== "Unknown" && (
+                  <div className="w-[14px] h-[14px] border border-gold-dark/20">
+                    <Image
+                      src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${match.spell2Name}.png`}
+                      alt={match.spell2Name}
+                      width={14}
+                      height={14}
+                      className="w-full h-full object-cover"
+                      unoptimized
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Rune tree icons (primary + secondary) */}
+              <div className="flex flex-col gap-[1px] shrink-0">
+                {match.primaryStyleIcon && (
+                  <div className="w-[14px] h-[14px]">
+                    <Image
+                      src={`${DDRAGON_IMG}/${match.primaryStyleIcon}`}
+                      alt="Primary"
+                      width={14}
+                      height={14}
+                      className="w-full h-full object-contain"
+                      unoptimized
+                    />
+                  </div>
+                )}
+                {match.subStyleIcon && (
+                  <div className="w-[14px] h-[14px] opacity-60">
+                    <Image
+                      src={`${DDRAGON_IMG}/${match.subStyleIcon}`}
+                      alt="Secondary"
+                      width={14}
+                      height={14}
+                      className="w-full h-full object-contain"
+                      unoptimized
+                    />
+                  </div>
+                )}
+              </div>
 
               {/* KDA */}
-              <div className="flex flex-col items-center shrink-0 w-16 sm:w-20">
-                <span className="text-text-primary text-xs">
+              <div className="flex flex-col items-center shrink-0 w-14 sm:w-16">
+                <span className="text-text-primary text-[11px]">
                   {match.kills}/{match.deaths}/{match.assists}
                 </span>
-                <span className={`text-[10px] ${
+                <span className={`text-[9px] ${
                   Number(kda) >= 3 ? "text-win" : Number(kda) >= 2 ? "text-gold-primary" : "text-text-muted"
                 }`}>
                   {kda} KDA
@@ -151,38 +204,62 @@ export function MatchHistoryTable({ matches, ddVersion, playerPuuid, friendMap, 
               </div>
 
               {/* CS */}
-              <span className="text-text-secondary text-xs shrink-0 w-12 text-center hidden sm:block">
+              <span className="text-text-secondary text-[10px] shrink-0 text-center hidden sm:block">
                 {match.cs} CS
               </span>
 
-              {/* Duration */}
-              <span className="text-text-muted text-xs shrink-0 w-12 text-center hidden sm:block">
-                {formatDuration(match.gameDuration)}
-              </span>
+              {/* Items */}
+              <div className="flex gap-[2px] shrink-0 hidden sm:flex">
+                {match.items.map((itemId, idx) => (
+                  <div
+                    key={idx}
+                    className="w-[18px] h-[18px] border border-gold-dark/20 bg-[#0a0e1a]"
+                  >
+                    {itemId > 0 && (
+                      <Image
+                        src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/item/${itemId}.png`}
+                        alt={`Item ${itemId}`}
+                        width={18}
+                        height={18}
+                        className="w-full h-full object-cover"
+                        unoptimized
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
 
-              {/* Queue badge */}
-              <span className="text-[9px] px-1.5 py-px bg-text-muted/10 border border-text-muted/20 text-text-muted shrink-0 hidden sm:block">
-                {getQueueName(match.queueId)}
-              </span>
+              {/* Flexible middle — party info or champion name */}
+              <div className="flex-1 min-w-0 hidden sm:flex items-center gap-2">
+                {duoNames.length > 0 ? (
+                  <span className="text-[9px] px-1.5 py-px bg-blue-dark/15 border border-blue-dark/30 text-blue-bright flex items-center gap-1 truncate">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="shrink-0">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    <span className="truncate">{partyLabel(duoNames.length)} — {duoNames.join(", ")}</span>
+                  </span>
+                ) : (
+                  <span className="text-text-muted/50 text-[10px] truncate">
+                    {match.championName}
+                  </span>
+                )}
+              </div>
 
-              {/* Party tag */}
-              {duoNames.length > 0 && (
-                <span
-                  className="text-[9px] px-1.5 py-px bg-blue-dark/20 border border-blue-dark/40 text-blue-bright shrink-0 hidden sm:flex items-center gap-1"
-                  title={duoNames.join(", ")}
-                >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                  </svg>
-                  {partyLabel(duoNames.length)} — {duoNames.join(", ")}
+              {/* Duration + Queue */}
+              <div className="flex items-center gap-2 shrink-0 hidden sm:flex">
+                <span className="text-text-muted text-[10px]">
+                  {formatDuration(match.gameDuration)}
                 </span>
-              )}
+                <span className="text-[9px] px-1 py-px bg-text-muted/10 border border-text-muted/20 text-text-muted">
+                  {getQueueName(match.queueId)}
+                </span>
+              </div>
 
-              {/* Time ago — pushed to right */}
-              <span className="text-text-muted text-[10px] ml-auto shrink-0">
+              {/* Time ago */}
+              <span className="text-text-muted text-[10px] shrink-0 ml-auto sm:ml-0">
                 {timeAgo(match.gameCreation)}
               </span>
             </div>

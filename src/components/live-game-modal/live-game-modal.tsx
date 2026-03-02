@@ -9,7 +9,10 @@ import { checkRateLimit } from "@/utils/rate-limit-event";
 import { getFriends, addFriend as storageAddFriend } from "@/utils/storage";
 import { GameTimer } from "@/components/game-timer";
 import { getTierColorClass } from "@/lib/rank-utils";
-import type { LiveGameData, LiveGameParticipant, Region } from "@/utils/types";
+import type { LiveGameData, LiveGameParticipant, Region, RuneTreeInfo } from "@/utils/types";
+import { RuneDetailModal } from "@/components/rune-detail-modal";
+
+const DDRAGON_IMG = "https://ddragon.leagueoflegends.com/cdn/img";
 
 interface LiveGameModalProps {
   puuid: string;
@@ -34,6 +37,8 @@ function TeamSection({
   viewedPuuid,
   addingPuuid,
   onAdd,
+  runeIconMap,
+  onRuneClick,
 }: {
   participants: LiveGameParticipant[];
   teamId: number;
@@ -42,6 +47,8 @@ function TeamSection({
   viewedPuuid: string;
   addingPuuid: string | null;
   onAdd: (puuid: string, gameName: string, tagLine: string) => void;
+  runeIconMap: Record<number, string>;
+  onRuneClick: (p: LiveGameParticipant) => void;
 }) {
   const team = participants.filter((p) => p.teamId === teamId);
   if (team.length === 0) return null;
@@ -79,6 +86,24 @@ function TeamSection({
                       : "hover:bg-[#ff4a4a]/5 border-l-2 border-l-transparent"
               }`}
             >
+              {/* Add button */}
+              {canAdd && (
+                <button
+                  onClick={() => onAdd(p.puuid, p.gameName, p.tagLine)}
+                  disabled={isAdding}
+                  className="shrink-0 w-5 h-5 flex items-center justify-center rounded border border-gold-dark/40 text-text-muted hover:text-gold-primary hover:border-gold-primary/60 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait"
+                  title={`Dodaj ${p.gameName}`}
+                >
+                  {isAdding ? (
+                    <div className="w-2.5 h-2.5 border border-gold-dark border-t-gold-primary rounded-full animate-spin" />
+                  ) : (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  )}
+                </button>
+              )}
+
               {/* Champion icon */}
               <div className="w-9 h-9 shrink-0 border border-gold-dark/30">
                 <Image
@@ -115,6 +140,24 @@ function TeamSection({
                 </div>
               </div>
 
+              {/* Rune button (keystone) */}
+              {p.perks && p.perks.primarySelections[0] !== undefined && runeIconMap[p.perks.primarySelections[0]] && (
+                <button
+                  onClick={() => onRuneClick(p)}
+                  className="shrink-0 w-5 h-5 rounded-full border border-gold-dark/30 hover:border-gold-primary/60 transition-colors cursor-pointer overflow-hidden"
+                  title="Pokaż runy"
+                >
+                  <Image
+                    src={`${DDRAGON_IMG}/${runeIconMap[p.perks.primarySelections[0]]}`}
+                    alt="Runy"
+                    width={20}
+                    height={20}
+                    className="w-full h-full object-cover"
+                    unoptimized
+                  />
+                </button>
+              )}
+
               {/* Name + champion */}
               <div className="flex flex-col min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
@@ -128,22 +171,6 @@ function TeamSection({
                   <span className="text-text-muted text-[10px]">#{p.tagLine}</span>
                   {isViewed && (
                     <span className="text-[8px] text-gold-primary uppercase tracking-wider">&#x25C0;</span>
-                  )}
-                  {canAdd && (
-                    <button
-                      onClick={() => onAdd(p.puuid, p.gameName, p.tagLine)}
-                      disabled={isAdding}
-                      className="shrink-0 w-5 h-5 flex items-center justify-center rounded border border-gold-dark/40 text-text-muted hover:text-gold-primary hover:border-gold-primary/60 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait"
-                      title={`Dodaj ${p.gameName}`}
-                    >
-                      {isAdding ? (
-                        <div className="w-2.5 h-2.5 border border-gold-dark border-t-gold-primary rounded-full animate-spin" />
-                      ) : (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M12 5v14M5 12h14" />
-                        </svg>
-                      )}
-                    </button>
                   )}
                   {isFriend && !isViewed && (
                     <span className="shrink-0 text-[8px] text-gold-dark uppercase tracking-wider font-medium">
@@ -174,6 +201,10 @@ export function LiveGameModal({ puuid, region, onClose }: LiveGameModalProps) {
   const [ddVersion, setDdVersion] = useState("");
   const [friendPuuids, setFriendPuuids] = useState<Set<string>>(new Set());
   const [addingPuuid, setAddingPuuid] = useState<string | null>(null);
+  const [runeIconMap, setRuneIconMap] = useState<Record<number, string>>({});
+  const [runeNameMap, setRuneNameMap] = useState<Record<number, string>>({});
+  const [runeTreesData, setRuneTreesData] = useState<Record<number, RuneTreeInfo>>({});
+  const [runePlayer, setRunePlayer] = useState<LiveGameParticipant | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -210,6 +241,9 @@ export function LiveGameModal({ puuid, region, onClose }: LiveGameModalProps) {
         }
         setGame(result.data);
         setDdVersion(result.ddVersion);
+        setRuneIconMap(result.runeIconMap);
+        setRuneNameMap(result.runeNameMap);
+        setRuneTreesData(result.runeTreesData);
       } catch (err) {
         checkRateLimit(err);
         if (!cancelled) setError("Nie udało się pobrać danych o grze");
@@ -297,6 +331,8 @@ export function LiveGameModal({ puuid, region, onClose }: LiveGameModalProps) {
                 viewedPuuid={puuid}
                 addingPuuid={addingPuuid}
                 onAdd={handleAddFriend}
+                runeIconMap={runeIconMap}
+                onRuneClick={setRunePlayer}
               />
               <div className="lol-divider my-3" />
               <TeamSection
@@ -307,6 +343,8 @@ export function LiveGameModal({ puuid, region, onClose }: LiveGameModalProps) {
                 viewedPuuid={puuid}
                 addingPuuid={addingPuuid}
                 onAdd={handleAddFriend}
+                runeIconMap={runeIconMap}
+                onRuneClick={setRunePlayer}
               />
             </>
           )}
@@ -316,5 +354,22 @@ export function LiveGameModal({ puuid, region, onClose }: LiveGameModalProps) {
   );
 
   if (!mounted) return null;
-  return createPortal(content, document.body);
+  return createPortal(
+    <>
+      {content}
+      {runePlayer && runePlayer.perks && ddVersion && (
+        <RuneDetailModal
+          playerName={runePlayer.gameName}
+          championName={runePlayer.championName}
+          perks={runePlayer.perks}
+          runeIconMap={runeIconMap}
+          runeNameMap={runeNameMap}
+          runeTreesData={runeTreesData}
+          ddVersion={ddVersion}
+          onClose={() => setRunePlayer(null)}
+        />
+      )}
+    </>,
+    document.body
+  );
 }

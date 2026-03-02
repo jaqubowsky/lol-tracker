@@ -43,6 +43,16 @@ export interface RecentMatch {
   gameEndTimestamp: number;
 }
 
+export interface ParticipantPerks {
+  primaryStyleId: number;
+  subStyleId: number;
+  primarySelections: number[];  // 4 rune IDs
+  subSelections: number[];      // 2 rune IDs
+  statOffense: number;
+  statFlex: number;
+  statDefense: number;
+}
+
 export interface ScoreboardParticipant {
   puuid: string;
   championName: string;
@@ -68,6 +78,9 @@ export interface ScoreboardParticipant {
   item6: number;
   win: boolean;
   rank: RankInfo | null;
+  spell1Name: string;
+  spell2Name: string;
+  perks: ParticipantPerks | null;
 }
 
 export interface ScoreboardData {
@@ -114,6 +127,11 @@ export interface RankedMatchDetail {
   gameDuration: number;
   teammatePuuids: string[];
   teammateChampions: Record<string, string>;
+  items: number[];
+  spell1Name: string;
+  spell2Name: string;
+  primaryStyleIcon: string;
+  subStyleIcon: string;
 }
 
 export interface RankDataPoint {
@@ -145,6 +163,7 @@ export interface LiveGameParticipant {
   spell1Name: string;
   spell2Name: string;
   rank: RankInfo | null;
+  perks: ParticipantPerks | null;
 }
 
 export interface LiveGameData {
@@ -152,6 +171,20 @@ export interface LiveGameData {
   gameMode: string;
   gameStartTime: number;
   participants: LiveGameParticipant[];
+}
+
+export interface RuneSlotRune {
+  id: number;
+  name: string;
+  icon: string;
+  shortDesc: string;
+}
+
+export interface RuneTreeInfo {
+  id: number;
+  name: string;
+  icon: string;
+  slots: { runes: RuneSlotRune[] }[];
 }
 
 export type QueueFilter = "all" | "solo" | "flex";

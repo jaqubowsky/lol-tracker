@@ -88,6 +88,11 @@ const spectatorParticipantSchema = z.object({
   spell1Id: z.number(),
   spell2Id: z.number(),
   teamId: z.number(),
+  perks: z.object({
+    perkIds: z.array(z.number()).default([]),
+    perkStyle: z.number().default(0),
+    perkSubStyle: z.number().default(0),
+  }).optional(),
 });
 
 const spectatorSchema = z.object({
@@ -113,6 +118,20 @@ const matchParticipantSchema = z.object({
   assists: z.number(),
   totalMinionsKilled: z.number().nullable().optional().transform((v) => v ?? 0),
   neutralMinionsKilled: z.number().nullable().optional().transform((v) => v ?? 0),
+  summoner1Id: z.number().default(0),
+  summoner2Id: z.number().default(0),
+  item0: z.number().default(0),
+  item1: z.number().default(0),
+  item2: z.number().default(0),
+  item3: z.number().default(0),
+  item4: z.number().default(0),
+  item5: z.number().default(0),
+  item6: z.number().default(0),
+  perks: z.object({
+    styles: z.array(z.object({
+      style: z.number(),
+    })).default([]),
+  }).optional(),
 });
 
 const matchInfoSchema = z.object({
@@ -151,6 +170,21 @@ const scoreboardParticipantSchema = z.object({
   item5: z.number().default(0),
   item6: z.number().default(0),
   win: z.boolean(),
+  summoner1Id: z.number().default(0),
+  summoner2Id: z.number().default(0),
+  perks: z.object({
+    styles: z.array(z.object({
+      style: z.number(),
+      selections: z.array(z.object({
+        perk: z.number(),
+      })),
+    })).default([]),
+    statPerks: z.object({
+      offense: z.number().default(0),
+      flex: z.number().default(0),
+      defense: z.number().default(0),
+    }).default({ offense: 0, flex: 0, defense: 0 }),
+  }).optional(),
 });
 
 const scoreboardMatchSchema = z.object({

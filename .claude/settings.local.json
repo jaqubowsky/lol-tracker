@@ -19,7 +19,8 @@
       "WebFetch(domain:mobalytics.gg)",
       "Bash(xargs:*)",
       "Bash(gh api:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:leagueoflegends.fandom.com)"
     ]
   }
 }

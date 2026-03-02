@@ -1,10 +1,26 @@
 import { DDRAGON_URL } from "./config";
 import { getActiveGame } from "./riot-api";
-import type { Friend, GameInfo } from "@/utils/types";
+import type { Friend, GameInfo, RuneTreeInfo } from "@/utils/types";
+
+/** Strip HTML tags and decode basic entities for tooltip text */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 // Module-scope maps (populated from DDragon, cached via Next.js Data Cache)
 let championMap: Record<number, string> = {};
 let spellMap: Record<number, string> = {};
+let runeMap: Record<number, { name: string; icon: string }> = {};
+let runeTreesMap: Record<number, RuneTreeInfo> = {};
+let itemMap: Record<number, { name: string; description: string }> = {};
 let cachedDdVersion: string | null = null;
 
 // In-flight dedup so concurrent calls don't trigger multiple fetches
@@ -35,12 +51,18 @@ async function _loadStaticData(): Promise<string> {
   }
   const version = versions[0];
 
-  // Champion + spell data — versioned URLs are effectively immutable
-  const [champRes, spellRes] = await Promise.all([
+  // Champion + spell + rune + item data — versioned URLs are effectively immutable
+  const [champRes, spellRes, runesRes, itemRes] = await Promise.all([
     fetch(`${DDRAGON_URL}/cdn/${version}/data/en_US/champion.json`, {
       next: { revalidate: 86400 },
     }),
     fetch(`${DDRAGON_URL}/cdn/${version}/data/en_US/summoner.json`, {
+      next: { revalidate: 86400 },
+    }),
+    fetch(`${DDRAGON_URL}/cdn/${version}/data/pl_PL/runesReforged.json`, {
+      next: { revalidate: 86400 },
+    }),
+    fetch(`${DDRAGON_URL}/cdn/${version}/data/pl_PL/item.json`, {
       next: { revalidate: 86400 },
     }),
   ]);
@@ -49,6 +71,12 @@ async function _loadStaticData(): Promise<string> {
   }
   if (!spellRes.ok) {
     throw new Error(`DDragon spell data fetch failed: ${spellRes.status}`);
+  }
+  if (!runesRes.ok) {
+    throw new Error(`DDragon runes data fetch failed: ${runesRes.status}`);
+  }
+  if (!itemRes.ok) {
+    throw new Error(`DDragon item data fetch failed: ${itemRes.status}`);
   }
 
   const champData = await champRes.json();
@@ -71,6 +99,70 @@ async function _loadStaticData(): Promise<string> {
   }
   spellMap = newSpellMap;
 
+  // Build rune map + full tree data
+  const runesData = await runesRes.json();
+  const newRuneMap: Record<number, { name: string; icon: string }> = {};
+  const newRuneTreesMap: Record<number, RuneTreeInfo> = {};
+  for (const tree of runesData as Array<{
+    id: number;
+    key: string;
+    name: string;
+    icon: string;
+    slots: Array<{ runes: Array<{ id: number; key: string; name: string; icon: string; shortDesc?: string }> }>;
+  }>) {
+    // Map the tree itself (perkStyleId)
+    newRuneMap[tree.id] = { name: tree.name, icon: tree.icon };
+    // Build full tree info
+    newRuneTreesMap[tree.id] = {
+      id: tree.id,
+      name: tree.name,
+      icon: tree.icon,
+      slots: tree.slots.map((slot) => ({
+        runes: slot.runes.map((r) => ({
+          id: r.id,
+          name: r.name,
+          icon: r.icon,
+          shortDesc: stripHtml(r.shortDesc ?? ""),
+        })),
+      })),
+    };
+    // Map each individual rune
+    for (const slot of tree.slots) {
+      for (const rune of slot.runes) {
+        newRuneMap[rune.id] = { name: rune.name, icon: rune.icon };
+      }
+    }
+  }
+  // Stat shards — not in runesReforged.json, hardcoded mapping
+  const statShards: Record<number, { name: string; icon: string }> = {
+    5008: { name: "+9 Siła adaptacyjna", icon: "perk-images/StatMods/StatModsAdaptiveForceIcon.png" },
+    5005: { name: "+10% Szybkość ataku", icon: "perk-images/StatMods/StatModsAttackSpeedIcon.png" },
+    5007: { name: "+8 Przyspieszenie umiejętności", icon: "perk-images/StatMods/StatModsCDRScalingIcon.png" },
+    5002: { name: "+6 Pancerz", icon: "perk-images/StatMods/StatModsArmorIcon.png" },
+    5003: { name: "+8 Odporność na magię", icon: "perk-images/StatMods/StatModsMagicResIcon.png" },
+    5001: { name: "+10-180 Zdrowie", icon: "perk-images/StatMods/StatModsHealthScalingIcon.png" },
+    5010: { name: "+2% Szybkość ruchu", icon: "perk-images/StatMods/StatModsMovementSpeedIcon.png" },
+    5011: { name: "+65 Zdrowie", icon: "perk-images/StatMods/StatModsHealthScalingIcon.png" },
+    5013: { name: "+10% Odporność i spowolnienie", icon: "perk-images/StatMods/StatModsTenacityIcon.png" },
+  };
+  for (const [id, data] of Object.entries(statShards)) {
+    newRuneMap[Number(id)] = data;
+  }
+
+  runeMap = newRuneMap;
+  runeTreesMap = newRuneTreesMap;
+
+  // Build item map: itemId → { name, description }
+  const itemData = await itemRes.json();
+  const newItemMap: Record<number, { name: string; description: string }> = {};
+  for (const [key, item] of Object.entries(itemData.data) as Array<[string, { name: string; description: string }]>) {
+    newItemMap[parseInt(key, 10)] = {
+      name: item.name,
+      description: stripHtml(item.description),
+    };
+  }
+  itemMap = newItemMap;
+
   cachedDdVersion = version;
   return version;
 }
@@ -81,6 +173,22 @@ export function getChampionName(championId: number): string {
 
 export function getSpellName(spellId: number): string {
   return spellMap[spellId] ?? "Unknown";
+}
+
+export function getRuneIcon(runeId: number): string {
+  return runeMap[runeId]?.icon ?? "";
+}
+
+export function getRuneName(runeId: number): string {
+  return runeMap[runeId]?.name ?? "Unknown";
+}
+
+export function getRuneTree(treeId: number): RuneTreeInfo | null {
+  return runeTreesMap[treeId] ?? null;
+}
+
+export function getItemInfo(itemId: number): { name: string; description: string } | null {
+  return itemMap[itemId] ?? null;
 }
 
 export async function checkFriendGameStatus(

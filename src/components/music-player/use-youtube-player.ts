@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 
-const PLAYLIST_ID = "PLVtd53WJ5E4k7u8deZv5byvGlEOTbl-AT";
+const PLAYLIST_ID = "PL7A6R2BqntOVhfytSBtGw1gygkdd9whg8";
 
 function loadYTScript(): Promise<void> {
   return new Promise((resolve) => {
@@ -60,18 +60,28 @@ export function useYouTubePlayer(containerId: string) {
           rel: 0,
           fs: 0,
           playsinline: 1,
+          loop: 1,
         },
         events: {
           onReady: () => {
             if (!destroyed) {
               setIsReady(true);
               playerRef.current?.setVolume(50);
+              playerRef.current?.setLoop(true);
             }
           },
           onStateChange: (event) => {
             if (destroyed) return;
             const state = event.data;
             setIsPlaying(state === 1);
+            // Fallback loop: if playlist ends, restart from beginning
+            if (state === 0) {
+              try {
+                playerRef.current?.playVideoAt(0);
+              } catch {
+                // ignore
+              }
+            }
             if (state === 1 || state === 3) {
               try {
                 const data = playerRef.current?.getVideoData();

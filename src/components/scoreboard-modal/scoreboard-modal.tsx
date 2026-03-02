@@ -7,9 +7,13 @@ import { fetchScoreboard } from "./action";
 import { resolveFriend } from "@/components/add-friend-form/action";
 import { checkRateLimit } from "@/utils/rate-limit-event";
 import { getFriends, addFriend as storageAddFriend } from "@/utils/storage";
-import type { ScoreboardData, ScoreboardParticipant, Region } from "@/utils/types";
+import type { ScoreboardData, ScoreboardParticipant, Region, RuneTreeInfo } from "@/utils/types";
 import { partyLabel } from "@/utils/format";
 import { getTierColorClass } from "@/lib/rank-utils";
+import { RuneDetailModal } from "@/components/rune-detail-modal";
+import { Tooltip } from "@/components/tooltip";
+
+const DDRAGON_IMG = "https://ddragon.leagueoflegends.com/cdn/img";
 
 interface ScoreboardModalProps {
   matchId: string;
@@ -33,7 +37,6 @@ function formatDuration(seconds: number): string {
 function TeamTable({
   participants,
   teamId,
-  maxDamage,
   ddVersion,
   playerPuuid,
   playerTeamId,
@@ -41,10 +44,12 @@ function TeamTable({
   knownPlayersMap,
   addingPuuid,
   onAdd,
+  runeIconMap,
+  onRuneClick,
+  itemDescMap,
 }: {
   participants: ScoreboardParticipant[];
   teamId: number;
-  maxDamage: number;
   ddVersion: string;
   playerPuuid?: string;
   playerTeamId?: number;
@@ -52,6 +57,9 @@ function TeamTable({
   knownPlayersMap?: Map<string, string>;
   addingPuuid: string | null;
   onAdd: (puuid: string, gameName: string, tagLine: string) => void;
+  runeIconMap: Record<number, string>;
+  onRuneClick: (p: ScoreboardParticipant) => void;
+  itemDescMap: Record<number, string>;
 }) {
   const teamPlayers = participants.filter((p) => p.teamId === teamId);
   if (teamPlayers.length === 0) return null;
@@ -88,23 +96,22 @@ function TeamTable({
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+      <div>
+        <table className="w-full text-xs table-fixed">
           <thead>
             <tr className="text-text-muted uppercase text-[10px] tracking-wider">
-              <th className="text-left py-1.5 px-2">Gracz</th>
-              <th className="text-center py-1.5 px-1">KDA</th>
-              <th className="text-center py-1.5 px-1 hidden sm:table-cell">CS</th>
-              <th className="text-center py-1.5 px-1 hidden md:table-cell">DMG</th>
-              <th className="text-center py-1.5 px-1 hidden sm:table-cell">Zloto</th>
-              <th className="text-center py-1.5 px-1 hidden md:table-cell">Wizja</th>
+              <th className="text-left py-1.5 px-2 w-[36%]">Gracz</th>
+              <th className="text-center py-1.5 px-1 w-[8%]">KDA</th>
+              <th className="text-center py-1.5 px-1 hidden sm:table-cell w-[5%]">CS</th>
+              <th className="text-center py-1.5 px-1 hidden md:table-cell w-[7%]">DMG</th>
+              <th className="text-center py-1.5 px-1 hidden sm:table-cell w-[7%]">Zloto</th>
+              <th className="text-center py-1.5 px-1 hidden md:table-cell w-[5%]">Wizja</th>
               <th className="text-center py-1.5 px-1 hidden sm:table-cell">Przedmioty</th>
             </tr>
           </thead>
           <tbody>
             {teamPlayers.map((p, i) => {
               const cs = p.totalMinionsKilled + p.neutralMinionsKilled;
-              const damagePercent = maxDamage > 0 ? (p.totalDamageDealtToChampions / maxDamage) * 100 : 0;
               const displayName = p.riotIdGameName || p.summonerName || "???";
               const items = [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6];
               const isHighlighted = playerPuuid !== undefined && p.puuid === playerPuuid;
@@ -125,37 +132,9 @@ function TeamTable({
                       : isBlue ? "hover:bg-[#4a9fff]/5" : "hover:bg-[#ff4a4a]/5"
                   }`}
                 >
-                  {/* Champion + name */}
-                  <td className="py-1.5 px-2">
+                  {/* Champion + spells + name */}
+                  <td className="py-1.5 px-2 overflow-hidden">
                     <div className="flex items-center gap-2">
-                      <div className="relative w-8 h-8 shrink-0 border border-gold-dark/40">
-                        <Image
-                          src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${p.championName}.png`}
-                          alt={p.championName}
-                          width={32}
-                          height={32}
-                          className="w-full h-full object-cover"
-                          unoptimized
-                        />
-                        <span className="absolute -bottom-1 -right-1 bg-bg-primary text-text-secondary text-[8px] font-bold px-1 border border-gold-dark/30 leading-tight">
-                          {p.champLevel}
-                        </span>
-                      </div>
-                      <div className="flex flex-col min-w-0 max-w-[100px]">
-                        <span className={`truncate text-[11px] font-medium ${
-                          isHighlighted ? "text-gold-bright font-bold" : "text-text-primary"
-                        }`}>
-                          {displayName}
-                          {isHighlighted && (
-                            <span className="ml-1 text-[8px] text-gold-primary font-normal uppercase tracking-wider">&#x25C0;</span>
-                          )}
-                        </span>
-                        {p.rank && (
-                          <span className={`${getTierColorClass(p.rank.tier)} text-[9px] uppercase tracking-wide font-medium`}>
-                            {p.rank.tier} {p.rank.division} · {p.rank.lp} LP
-                          </span>
-                        )}
-                      </div>
                       {canAdd && (
                         <button
                           onClick={() => onAdd(p.puuid, displayName, tagLine)}
@@ -172,21 +151,94 @@ function TeamTable({
                           )}
                         </button>
                       )}
+                      <div className="relative w-8 h-8 shrink-0 border border-gold-dark/40">
+                        <Image
+                          src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${p.championName}.png`}
+                          alt={p.championName}
+                          width={32}
+                          height={32}
+                          className="w-full h-full object-cover"
+                          unoptimized
+                        />
+                        <span className="absolute -bottom-1 -right-1 bg-bg-primary text-text-secondary text-[8px] font-bold px-1 border border-gold-dark/30 leading-tight">
+                          {p.champLevel}
+                        </span>
+                      </div>
+                      {/* Summoner spells */}
+                      <div className="flex flex-col gap-[2px] shrink-0">
+                        <div className="w-4 h-4 border border-gold-dark/20">
+                          {p.spell1Name && p.spell1Name !== "Unknown" && (
+                            <Image
+                              src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${p.spell1Name}.png`}
+                              alt={p.spell1Name}
+                              width={16}
+                              height={16}
+                              className="w-full h-full object-cover"
+                              unoptimized
+                            />
+                          )}
+                        </div>
+                        <div className="w-4 h-4 border border-gold-dark/20">
+                          {p.spell2Name && p.spell2Name !== "Unknown" && (
+                            <Image
+                              src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${p.spell2Name}.png`}
+                              alt={p.spell2Name}
+                              width={16}
+                              height={16}
+                              className="w-full h-full object-cover"
+                              unoptimized
+                            />
+                          )}
+                        </div>
+                      </div>
+                      {/* Rune button (keystone) */}
+                      {p.perks && p.perks.primarySelections[0] !== undefined && runeIconMap[p.perks.primarySelections[0]] && (
+                        <button
+                          onClick={() => onRuneClick(p)}
+                          className="shrink-0 w-5 h-5 rounded-full border border-gold-dark/30 hover:border-gold-primary/60 transition-colors cursor-pointer overflow-hidden"
+                          title="Pokaż runy"
+                        >
+                          <Image
+                            src={`${DDRAGON_IMG}/${runeIconMap[p.perks.primarySelections[0]]}`}
+                            alt="Runy"
+                            width={20}
+                            height={20}
+                            className="w-full h-full object-cover"
+                            unoptimized
+                          />
+                        </button>
+                      )}
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className={`truncate text-[11px] font-medium ${
+                          isHighlighted ? "text-gold-bright font-bold" : "text-text-primary"
+                        }`}>
+                          {displayName}
+                          {isHighlighted && (
+                            <span className="ml-1 text-[8px] text-gold-primary font-normal uppercase tracking-wider">&#x25C0;</span>
+                          )}
+                        </span>
+                        {p.rank && (
+                          <span className={`truncate ${getTierColorClass(p.rank.tier)} text-[9px] uppercase tracking-wide font-medium`}>
+                            {p.rank.tier} {p.rank.division} · {p.rank.lp} LP
+                          </span>
+                        )}
+                      </div>
                       {isFollowed && !isSelf && (
                         <span className="shrink-0 text-[8px] text-gold-dark uppercase tracking-wider font-medium">
                           obserwujesz
                         </span>
                       )}
                       {isPremade && premadeCount > 0 && (
-                        <span className="shrink-0 text-[9px] px-1.5 py-px bg-blue-dark/20 border border-blue-dark/40 text-blue-bright font-bold uppercase tracking-wider flex items-center gap-1">
-                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                            <circle cx="9" cy="7" r="4" />
-                            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                          </svg>
-                          {partyLabel(premadeCount)}
-                        </span>
+                        <Tooltip content={partyLabel(premadeCount)} delay={200}>
+                          <span className="shrink-0 text-blue-bright">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                              <circle cx="9" cy="7" r="4" />
+                              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                            </svg>
+                          </span>
+                        </Tooltip>
                       )}
                     </div>
                   </td>
@@ -205,19 +257,9 @@ function TeamTable({
                     {cs}
                   </td>
 
-                  {/* Damage with bar */}
-                  <td className="py-1.5 px-1 hidden md:table-cell">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-text-secondary text-[11px] w-[38px] text-right shrink-0">
-                        {formatNumber(p.totalDamageDealtToChampions)}
-                      </span>
-                      <div className="flex-1 h-[6px] bg-bg-primary/60 overflow-hidden">
-                        <div
-                          className={`h-full ${isBlue ? "bg-[#4a9fff]/60" : "bg-[#ff4a4a]/60"}`}
-                          style={{ width: `${damagePercent}%` }}
-                        />
-                      </div>
-                    </div>
+                  {/* Damage */}
+                  <td className="text-center text-text-secondary py-1.5 px-1 text-[11px] hidden md:table-cell">
+                    {formatNumber(p.totalDamageDealtToChampions)}
                   </td>
 
                   {/* Gold */}
@@ -233,23 +275,37 @@ function TeamTable({
                   {/* Items */}
                   <td className="py-1.5 px-1 hidden sm:table-cell">
                     <div className="flex gap-[2px] justify-center">
-                      {items.map((itemId, idx) => (
-                        <div
+                      {items.map((itemId, idx) => {
+                        const desc = itemId > 0 ? itemDescMap[itemId] : undefined;
+                        const tooltipContent = desc ? (() => {
+                          const [name, ...rest] = desc.split("\n");
+                          return (
+                            <div>
+                              <div className="font-bold text-white text-[11px]">{name}</div>
+                              {rest.length > 0 && <div className="text-[10px] opacity-80 mt-0.5">{rest.join(" ")}</div>}
+                            </div>
+                          );
+                        })() : null;
+                        return (
+                        <Tooltip
                           key={idx}
-                          className="w-6 h-6 border border-gold-dark/30 bg-bg-primary/60"
+                          content={tooltipContent}
                         >
-                          {itemId > 0 && (
-                            <Image
-                              src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/item/${itemId}.png`}
-                              alt={`Item ${itemId}`}
-                              width={24}
-                              height={24}
-                              className="w-full h-full object-cover"
-                              unoptimized
-                            />
-                          )}
-                        </div>
-                      ))}
+                          <div className="w-6 h-6 border border-gold-dark/30 bg-bg-primary/60">
+                            {itemId > 0 && (
+                              <Image
+                                src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/item/${itemId}.png`}
+                                alt={`Item ${itemId}`}
+                                width={24}
+                                height={24}
+                                className="w-full h-full object-cover"
+                                unoptimized
+                              />
+                            )}
+                          </div>
+                        </Tooltip>
+                        );
+                      })}
                     </div>
                   </td>
                 </tr>
@@ -270,6 +326,11 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
   const [ddVersion, setDdVersion] = useState("");
   const [friendPuuids, setFriendPuuids] = useState<Set<string>>(new Set());
   const [addingPuuid, setAddingPuuid] = useState<string | null>(null);
+  const [runeIconMap, setRuneIconMap] = useState<Record<number, string>>({});
+  const [runeNameMap, setRuneNameMap] = useState<Record<number, string>>({});
+  const [runeTreesData, setRuneTreesData] = useState<Record<number, RuneTreeInfo>>({});
+  const [itemDescMap, setItemDescMap] = useState<Record<number, string>>({});
+  const [runePlayer, setRunePlayer] = useState<ScoreboardParticipant | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -306,6 +367,10 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
         if (cancelled) return;
         setScoreboard(result.data);
         setDdVersion(result.ddVersion);
+        setRuneIconMap(result.runeIconMap);
+        setRuneNameMap(result.runeNameMap);
+        setRuneTreesData(result.runeTreesData);
+        setItemDescMap(result.itemDescMap);
       } catch (err) {
         checkRateLimit(err);
         if (cancelled) return;
@@ -331,10 +396,6 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = ""; };
   }, []);
-
-  const maxDamage = scoreboard
-    ? Math.max(...scoreboard.participants.map((p) => p.totalDamageDealtToChampions), 1)
-    : 1;
 
   const playerTeamId = scoreboard && playerPuuid
     ? scoreboard.participants.find((p) => p.puuid === playerPuuid)?.teamId
@@ -401,7 +462,7 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
               <TeamTable
                 participants={scoreboard.participants}
                 teamId={100}
-                maxDamage={maxDamage}
+
                 ddVersion={ddVersion}
                 playerPuuid={playerPuuid}
                 playerTeamId={playerTeamId}
@@ -409,12 +470,15 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
                 knownPlayersMap={knownPlayersMap}
                 addingPuuid={addingPuuid}
                 onAdd={handleAddFriend}
+                runeIconMap={runeIconMap}
+                onRuneClick={setRunePlayer}
+                itemDescMap={itemDescMap}
               />
               <div className="lol-divider my-3" />
               <TeamTable
                 participants={scoreboard.participants}
                 teamId={200}
-                maxDamage={maxDamage}
+
                 ddVersion={ddVersion}
                 playerPuuid={playerPuuid}
                 playerTeamId={playerTeamId}
@@ -422,6 +486,9 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
                 knownPlayersMap={knownPlayersMap}
                 addingPuuid={addingPuuid}
                 onAdd={handleAddFriend}
+                runeIconMap={runeIconMap}
+                onRuneClick={setRunePlayer}
+                itemDescMap={itemDescMap}
               />
             </>
           )}
@@ -431,5 +498,22 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
   );
 
   if (!mounted) return null;
-  return createPortal(content, document.body);
+  return createPortal(
+    <>
+      {content}
+      {runePlayer && runePlayer.perks && ddVersion && (
+        <RuneDetailModal
+          playerName={runePlayer.riotIdGameName || runePlayer.summonerName || "???"}
+          championName={runePlayer.championName}
+          perks={runePlayer.perks}
+          runeIconMap={runeIconMap}
+          runeNameMap={runeNameMap}
+          runeTreesData={runeTreesData}
+          ddVersion={ddVersion}
+          onClose={() => setRunePlayer(null)}
+        />
+      )}
+    </>,
+    document.body
+  );
 }

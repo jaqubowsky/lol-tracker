@@ -7,7 +7,7 @@ import {
   getMatchHistoryFiltered,
   getMatch,
 } from "@/lib/riot-api";
-import { loadStaticData } from "@/lib/game-checker";
+import { loadStaticData, getSpellName, getRuneIcon } from "@/lib/game-checker";
 import { API_BATCH_SIZE, API_BATCH_SIZE_SMALL } from "@/lib/config";
 import type {
   PlayerDetail,
@@ -79,6 +79,7 @@ export async function fetchRankedMatches(
   timeRange: TimeRangeFilter = "30d",
   options: { start?: number; startTime?: number; endTime?: number } = {}
 ): Promise<{ matches: RankedMatchDetail[]; hasMore: boolean }> {
+  await loadStaticData();
   const queueId = getQueueId(queue);
   const startTimeEpoch = options.startTime ?? getStartTime(timeRange);
   const count = 50;
@@ -119,6 +120,20 @@ export async function fetchRankedMatches(
             teammateChampions[p.puuid] = p.championName;
           }
 
+          const items = [
+            participant.item0, participant.item1, participant.item2,
+            participant.item3, participant.item4, participant.item5,
+            participant.item6,
+          ];
+
+          const spell1Name = getSpellName(participant.summoner1Id);
+          const spell2Name = getSpellName(participant.summoner2Id);
+
+          const primaryStyleId = participant.perks?.styles?.[0]?.style ?? 0;
+          const subStyleId = participant.perks?.styles?.[1]?.style ?? 0;
+          const primaryStyleIcon = primaryStyleId ? getRuneIcon(primaryStyleId) : "";
+          const subStyleIcon = subStyleId ? getRuneIcon(subStyleId) : "";
+
           return {
             matchId,
             win: participant.win,
@@ -132,6 +147,11 @@ export async function fetchRankedMatches(
             gameDuration: match.info.gameDuration,
             teammatePuuids,
             teammateChampions,
+            items,
+            spell1Name,
+            spell2Name,
+            primaryStyleIcon,
+            subStyleIcon,
           } satisfies RankedMatchDetail;
         } catch {
           return null;
