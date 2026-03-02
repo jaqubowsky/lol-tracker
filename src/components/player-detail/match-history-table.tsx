@@ -241,11 +241,7 @@ export function MatchHistoryTable({ matches, ddVersion, playerPuuid, friendMap, 
                     </svg>
                     <span className="truncate">{partyLabel(duoNames.length)} — {duoNames.join(", ")}</span>
                   </span>
-                ) : (
-                  <span className="text-text-muted/50 text-[10px] truncate">
-                    {match.championName}
-                  </span>
-                )}
+                ) : null}
               </div>
 
               {/* Duration + Queue */}
