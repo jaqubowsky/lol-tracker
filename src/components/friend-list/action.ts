@@ -13,6 +13,7 @@ import {
   getMatch,
   getChampionMastery,
 } from "@/lib/riot-api";
+import { computePostScores } from "@/lib/post-score";
 import { API_BATCH_SIZE_SMALL } from "@/lib/config";
 import { RATE_LIMIT_MARKER } from "@/utils/rate-limit-event";
 import type { Friend, Region, RankInfo, RecentMatch, ChampionMastery } from "@/utils/types";
@@ -41,6 +42,27 @@ async function refreshMatches(puuid: string): Promise<RecentMatch[]> {
         (p) => p.puuid === puuid
       );
       if (participant) {
+        // Compute POST Score for this match
+        const scoreInputs = match.info.participants.map((mp) => ({
+          puuid: mp.puuid,
+          kills: mp.kills,
+          deaths: mp.deaths,
+          assists: mp.assists,
+          totalMinionsKilled: mp.totalMinionsKilled ?? 0,
+          neutralMinionsKilled: mp.neutralMinionsKilled ?? 0,
+          totalDamageDealtToChampions: mp.totalDamageDealtToChampions,
+          goldEarned: mp.goldEarned,
+          visionScore: mp.visionScore,
+          totalDamageDealtToObjectives: mp.totalDamageDealtToObjectives,
+          timeCCingOthers: mp.timeCCingOthers,
+          teamPosition: mp.teamPosition,
+          individualPosition: mp.individualPosition,
+          teamId: mp.teamId,
+          win: mp.win,
+        }));
+        const scoreResults = computePostScores(scoreInputs, match.info.gameDuration, matchId);
+        const playerScore = scoreResults.find((r) => r.puuid === puuid);
+
         recentMatches.push({
           win: participant.win,
           championName: participant.championName,
@@ -48,6 +70,7 @@ async function refreshMatches(puuid: string): Promise<RecentMatch[]> {
           deaths: participant.deaths,
           assists: participant.assists,
           gameEndTimestamp: match.info.gameEndTimestamp,
+          postScore: playerScore?.postScore ?? 0,
         });
       }
     } catch {

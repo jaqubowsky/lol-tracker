@@ -8,6 +8,7 @@ import {
   getMatchHistory,
   getMatch,
 } from "@/lib/riot-api";
+import { computePostScores } from "@/lib/post-score";
 import { loadStaticData, getChampionName } from "@/lib/game-checker";
 import type { Friend, Region, RankInfo, RecentMatch, ChampionMastery } from "@/utils/types";
 
@@ -77,6 +78,26 @@ async function _resolveFriend(
         (p) => p.puuid === account.puuid
       );
       if (participant) {
+        const scoreInputs = match.info.participants.map((mp) => ({
+          puuid: mp.puuid,
+          kills: mp.kills,
+          deaths: mp.deaths,
+          assists: mp.assists,
+          totalMinionsKilled: mp.totalMinionsKilled ?? 0,
+          neutralMinionsKilled: mp.neutralMinionsKilled ?? 0,
+          totalDamageDealtToChampions: mp.totalDamageDealtToChampions,
+          goldEarned: mp.goldEarned,
+          visionScore: mp.visionScore,
+          totalDamageDealtToObjectives: mp.totalDamageDealtToObjectives,
+          timeCCingOthers: mp.timeCCingOthers,
+          teamPosition: mp.teamPosition,
+          individualPosition: mp.individualPosition,
+          teamId: mp.teamId,
+          win: mp.win,
+        }));
+        const scoreResults = computePostScores(scoreInputs, match.info.gameDuration, matchId);
+        const playerScore = scoreResults.find((r) => r.puuid === account.puuid);
+
         recentMatches.push({
           win: participant.win,
           championName: participant.championName,
@@ -84,6 +105,7 @@ async function _resolveFriend(
           deaths: participant.deaths,
           assists: participant.assists,
           gameEndTimestamp: match.info.gameEndTimestamp,
+          postScore: playerScore?.postScore ?? 0,
         });
       }
     } catch {

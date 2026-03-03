@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import Image from "next/image";
 import type { RankedMatchDetail, RankDataPoint, Region } from "@/utils/types";
 import { ScoreboardModal } from "@/components/scoreboard-modal/scoreboard-modal";
-import { partyLabel } from "@/utils/format";
+import { partyLabel, getPostScoreColor } from "@/utils/format";
 
 const DDRAGON_IMG = "https://ddragon.leagueoflegends.com/cdn/img";
 
@@ -83,7 +83,7 @@ export function MatchHistoryTable({ matches, ddVersion, playerPuuid, friendMap, 
           </span>
         )}
       </div>
-      <div className="space-y-1 max-h-[400px] overflow-y-auto pr-1">
+      <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-1">
         {matches.map((match) => {
           const champIconUrl = `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${match.championName}.png`;
           const kda = match.deaths === 0
@@ -104,86 +104,84 @@ export function MatchHistoryTable({ matches, ddVersion, playerPuuid, friendMap, 
               key={match.matchId}
               onClick={() => setScoreboardMatchId(match.matchId)}
               className={`
-                flex items-center gap-2 px-2 sm:px-3 py-1.5 transition-colors cursor-pointer
+                flex items-center gap-1.5 sm:gap-3 px-2 sm:px-4 py-1.5 sm:py-2.5 transition-colors cursor-pointer rounded-sm
                 ${match.win
                   ? "bg-win/5 border-l-2 border-win/40 hover:bg-win/10"
                   : "bg-loss/5 border-l-2 border-loss/40 hover:bg-loss/10"
                 }
               `}
             >
-              {/* W/L + LP indicator */}
-              <div className="flex flex-col items-center shrink-0 w-8">
-                <span className={`text-xs font-bold ${match.win ? "text-win" : "text-loss"}`}>
+              {/* W/L + duration */}
+              <div className="flex flex-col items-center shrink-0 w-8 sm:w-10">
+                <span className={`text-xs sm:text-sm font-bold ${match.win ? "text-win" : "text-loss"}`}>
                   {match.win ? "W" : "L"}
                 </span>
-                {lpDeltaMap.has(match.matchId) && (
-                  <span className={`text-[9px] font-semibold ${lpDeltaMap.get(match.matchId)! >= 0 ? "text-win/70" : "text-loss/70"}`}>
-                    {lpDeltaMap.get(match.matchId)! > 0 ? "+" : ""}{lpDeltaMap.get(match.matchId)} LP
-                  </span>
-                )}
+                <span className="text-text-muted text-[8px] sm:text-[9px] mt-0.5">
+                  {formatDuration(match.gameDuration)}
+                </span>
               </div>
 
               {/* Champion icon */}
-              <div className="w-8 h-8 shrink-0 border border-gold-dark/30">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 border border-gold-dark/30 rounded-sm">
                 <Image
                   src={champIconUrl}
                   alt={match.championName}
-                  width={32}
-                  height={32}
-                  className="w-full h-full object-cover"
+                  width={40}
+                  height={40}
+                  className="w-full h-full object-cover rounded-sm"
                   unoptimized
                 />
               </div>
 
               {/* Summoner spells */}
-              <div className="flex flex-col gap-[1px] shrink-0">
+              <div className="flex flex-col gap-[2px] shrink-0">
                 {match.spell1Name && match.spell1Name !== "Unknown" && (
-                  <div className="w-[14px] h-[14px] border border-gold-dark/20">
+                  <div className="w-[14px] h-[14px] sm:w-[18px] sm:h-[18px] border border-gold-dark/20 rounded-sm">
                     <Image
                       src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${match.spell1Name}.png`}
                       alt={match.spell1Name}
-                      width={14}
-                      height={14}
-                      className="w-full h-full object-cover"
+                      width={18}
+                      height={18}
+                      className="w-full h-full object-cover rounded-sm"
                       unoptimized
                     />
                   </div>
                 )}
                 {match.spell2Name && match.spell2Name !== "Unknown" && (
-                  <div className="w-[14px] h-[14px] border border-gold-dark/20">
+                  <div className="w-[14px] h-[14px] sm:w-[18px] sm:h-[18px] border border-gold-dark/20 rounded-sm">
                     <Image
                       src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${match.spell2Name}.png`}
                       alt={match.spell2Name}
-                      width={14}
-                      height={14}
-                      className="w-full h-full object-cover"
+                      width={18}
+                      height={18}
+                      className="w-full h-full object-cover rounded-sm"
                       unoptimized
                     />
                   </div>
                 )}
               </div>
 
-              {/* Rune tree icons (primary + secondary) */}
-              <div className="flex flex-col gap-[1px] shrink-0">
+              {/* Rune tree icons — hidden on mobile */}
+              <div className="hidden sm:flex flex-col gap-[2px] shrink-0">
                 {match.primaryStyleIcon && (
-                  <div className="w-[14px] h-[14px]">
+                  <div className="w-[18px] h-[18px]">
                     <Image
                       src={`${DDRAGON_IMG}/${match.primaryStyleIcon}`}
                       alt="Primary"
-                      width={14}
-                      height={14}
+                      width={18}
+                      height={18}
                       className="w-full h-full object-contain"
                       unoptimized
                     />
                   </div>
                 )}
                 {match.subStyleIcon && (
-                  <div className="w-[14px] h-[14px] opacity-60">
+                  <div className="w-[18px] h-[18px] opacity-60">
                     <Image
                       src={`${DDRAGON_IMG}/${match.subStyleIcon}`}
                       alt="Secondary"
-                      width={14}
-                      height={14}
+                      width={18}
+                      height={18}
                       className="w-full h-full object-contain"
                       unoptimized
                     />
@@ -193,35 +191,58 @@ export function MatchHistoryTable({ matches, ddVersion, playerPuuid, friendMap, 
 
               {/* KDA */}
               <div className="flex flex-col items-center shrink-0 w-14 sm:w-16">
-                <span className="text-text-primary text-[11px]">
-                  {match.kills}/{match.deaths}/{match.assists}
+                <span className="text-text-primary text-[11px] sm:text-xs font-medium">
+                  <span className="text-win">{match.kills}</span>
+                  <span className="text-text-muted">/</span>
+                  <span className="text-loss">{match.deaths}</span>
+                  <span className="text-text-muted">/</span>
+                  <span className="text-text-primary">{match.assists}</span>
                 </span>
-                <span className={`text-[9px] ${
+                <span className={`text-[9px] sm:text-[10px] ${
                   Number(kda) >= 3 ? "text-win" : Number(kda) >= 2 ? "text-gold-primary" : "text-text-muted"
                 }`}>
                   {kda} KDA
                 </span>
               </div>
 
-              {/* CS */}
-              <span className="text-text-secondary text-[10px] shrink-0 text-center hidden sm:block">
-                {match.cs} CS
-              </span>
+              {/* CS — hidden on mobile */}
+              <div className="hidden sm:flex flex-col items-center shrink-0 w-10">
+                <span className="text-text-secondary text-xs">{match.cs}</span>
+                <span className="text-text-muted text-[9px]">CS</span>
+              </div>
 
-              {/* Items */}
-              <div className="flex gap-[2px] shrink-0 hidden sm:flex">
+              {/* Score */}
+              <div className="flex flex-col items-center shrink-0 w-10 sm:w-12">
+                <span className={`text-[11px] sm:text-xs font-bold ${getPostScoreColor(match.postScore)}`}>
+                  {match.postScore.toFixed(1)}
+                </span>
+                {match.isMvp ? (
+                  <span className="text-[7px] sm:text-[8px] font-bold px-1 sm:px-1.5 py-px rounded-full bg-[#ffb928] text-white leading-tight">
+                    MVP
+                  </span>
+                ) : match.isAce ? (
+                  <span className="text-[7px] sm:text-[8px] font-bold px-1 sm:px-1.5 py-px rounded-full bg-[#8b5cf6] text-white leading-tight">
+                    ACE
+                  </span>
+                ) : (
+                  <span className="text-text-muted text-[8px] sm:text-[9px]">SCORE</span>
+                )}
+              </div>
+
+              {/* Items — hidden on mobile */}
+              <div className="hidden sm:flex gap-[3px] shrink-0">
                 {match.items.map((itemId, idx) => (
                   <div
                     key={idx}
-                    className="w-[18px] h-[18px] border border-gold-dark/20 bg-[#0a0e1a]"
+                    className="w-[22px] h-[22px] border border-gold-dark/20 bg-[#0a0e1a] rounded-sm"
                   >
                     {itemId > 0 && (
                       <Image
                         src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/item/${itemId}.png`}
                         alt={`Item ${itemId}`}
-                        width={18}
-                        height={18}
-                        className="w-full h-full object-cover"
+                        width={22}
+                        height={22}
+                        className="w-full h-full object-cover rounded-sm"
                         unoptimized
                       />
                     )}
@@ -229,11 +250,11 @@ export function MatchHistoryTable({ matches, ddVersion, playerPuuid, friendMap, 
                 ))}
               </div>
 
-              {/* Flexible middle — party info or champion name */}
-              <div className="flex-1 min-w-0 hidden sm:flex items-center gap-2">
-                {duoNames.length > 0 ? (
-                  <span className="text-[9px] px-1.5 py-px bg-blue-dark/15 border border-blue-dark/30 text-blue-bright flex items-center gap-1 truncate">
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="shrink-0">
+              {/* Spacer — party info (desktop only) */}
+              <div className="hidden sm:flex flex-1 min-w-0 items-center gap-2">
+                {duoNames.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-blue-dark/15 border border-blue-dark/30 text-blue-bright flex items-center gap-1 truncate rounded-sm">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="shrink-0">
                       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
                       <circle cx="9" cy="7" r="4" />
                       <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
@@ -241,23 +262,18 @@ export function MatchHistoryTable({ matches, ddVersion, playerPuuid, friendMap, 
                     </svg>
                     <span className="truncate">{partyLabel(duoNames.length)} — {duoNames.join(", ")}</span>
                   </span>
-                ) : null}
+                )}
               </div>
 
-              {/* Duration + Queue */}
-              <div className="flex items-center gap-2 shrink-0 hidden sm:flex">
-                <span className="text-text-muted text-[10px]">
-                  {formatDuration(match.gameDuration)}
+              {/* Right side: time ago + queue */}
+              <div className="flex flex-col items-end shrink-0 ml-auto">
+                <span className="text-text-muted text-[9px] sm:text-[10px]">
+                  {timeAgo(match.gameCreation)}
                 </span>
-                <span className="text-[9px] px-1 py-px bg-text-muted/10 border border-text-muted/20 text-text-muted">
+                <span className="text-[8px] sm:text-[9px] px-1 sm:px-1.5 py-0.5 bg-text-muted/10 border border-text-muted/20 text-text-muted rounded-sm mt-0.5">
                   {getQueueName(match.queueId)}
                 </span>
               </div>
-
-              {/* Time ago */}
-              <span className="text-text-muted text-[10px] shrink-0 ml-auto sm:ml-0">
-                {timeAgo(match.gameCreation)}
-              </span>
             </div>
           );
         })}

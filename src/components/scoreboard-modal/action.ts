@@ -2,6 +2,7 @@
 
 import { getMatchScoreboard, getRankedEntries } from "@/lib/riot-api";
 import { loadStaticData, getSpellName, getRuneIcon, getRuneName, getRuneTree, getItemInfo } from "@/lib/game-checker";
+import { computePostScores } from "@/lib/post-score";
 import { API_BATCH_SIZE } from "@/lib/config";
 import type { ScoreboardData, RankInfo, ParticipantPerks, RuneTreeInfo, Region } from "@/utils/types";
 
@@ -116,8 +117,42 @@ export async function fetchScoreboard(
       spell1Name: getSpellName(p.summoner1Id),
       spell2Name: getSpellName(p.summoner2Id),
       perks,
+      postScore: 0,
+      postScoreRank: 0,
+      isMvp: false,
+      isAce: false,
     };
   });
+
+  // Compute POST Scores
+  const scoreInputs = rawParticipants.map((p) => ({
+    puuid: p.puuid,
+    kills: p.kills,
+    deaths: p.deaths,
+    assists: p.assists,
+    totalMinionsKilled: p.totalMinionsKilled,
+    neutralMinionsKilled: p.neutralMinionsKilled,
+    totalDamageDealtToChampions: p.totalDamageDealtToChampions,
+    goldEarned: p.goldEarned,
+    visionScore: p.visionScore,
+    totalDamageDealtToObjectives: p.totalDamageDealtToObjectives,
+    timeCCingOthers: p.timeCCingOthers,
+    teamPosition: p.teamPosition,
+    individualPosition: p.individualPosition,
+    teamId: p.teamId,
+    win: p.win,
+  }));
+  const scoreResults = computePostScores(scoreInputs, match.info.gameDuration, matchId);
+  const scoreMap = new Map(scoreResults.map((r) => [r.puuid, r]));
+  for (const p of participants) {
+    const s = scoreMap.get(p.puuid);
+    if (s) {
+      p.postScore = s.postScore;
+      p.postScoreRank = s.postScoreRank;
+      p.isMvp = s.isMvp;
+      p.isAce = s.isAce;
+    }
+  }
 
   // Build maps
   const runeIconMap: Record<number, string> = {};

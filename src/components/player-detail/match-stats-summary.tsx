@@ -1,4 +1,5 @@
 import type { RankedMatchDetail } from "@/utils/types";
+import { getPostScoreColor } from "@/utils/format";
 
 interface MatchStatsSummaryProps {
   matches: RankedMatchDetail[];
@@ -75,8 +76,24 @@ export function MatchStatsSummary({ matches, ddVersion }: MatchStatsSummaryProps
       : []),
   ];
 
+  // POST Score stats
+  const avgOpScore = matches.reduce((s, m) => s + m.postScore, 0) / matches.length;
+  const mvpCount = matches.filter((m) => m.isMvp).length;
+  const aceCount = matches.filter((m) => m.isAce).length;
+  const opScoreSub = [
+    mvpCount > 0 ? `${mvpCount} MVP` : null,
+    aceCount > 0 ? `${aceCount} ACE` : null,
+  ].filter(Boolean).join(" \u00b7 ") || "Brak MVP/ACE";
+
+  statBoxes.push({
+    label: "POST Score",
+    value: avgOpScore.toFixed(1),
+    sub: opScoreSub,
+    color: getPostScoreColor(avgOpScore),
+  });
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-6">
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 mb-6">
       {statBoxes.map((stat) => (
         <div
           key={stat.label}

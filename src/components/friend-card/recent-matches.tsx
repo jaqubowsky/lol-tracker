@@ -1,4 +1,5 @@
 import type { RecentMatch } from "@/utils/types";
+import { getPostScoreColor } from "@/utils/format";
 
 interface RecentMatchesProps {
   matches: RecentMatch[];
@@ -43,17 +44,15 @@ export function RecentMatches({ matches }: RecentMatchesProps) {
           </div>
         ))}
       </div>
-      {/* Timeline indicator */}
+      {/* POST Score values */}
       <div className="flex items-center mt-1 gap-[3px]">
-        {matches.map((_, i) => (
+        {matches.map((match, i) => (
           <div
             key={i}
-            className="h-[4px] w-[22px] rounded-full"
-            style={{
-              background: `linear-gradient(90deg, var(--color-gold-primary), var(--color-gold-dark))`,
-              opacity: 1 - i * 0.18,
-            }}
-          />
+            className={`w-[22px] text-center text-[8px] font-bold ${getPostScoreColor(match.postScore)}`}
+          >
+            {match.postScore.toFixed(1)}
+          </div>
         ))}
       </div>
     </div>

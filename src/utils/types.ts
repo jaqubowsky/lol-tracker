@@ -41,6 +41,7 @@ export interface RecentMatch {
   deaths: number;
   assists: number;
   gameEndTimestamp: number;
+  postScore: number;
 }
 
 export interface ParticipantPerks {
@@ -81,6 +82,10 @@ export interface ScoreboardParticipant {
   spell1Name: string;
   spell2Name: string;
   perks: ParticipantPerks | null;
+  postScore: number;
+  postScoreRank: number;
+  isMvp: boolean;
+  isAce: boolean;
 }
 
 export interface ScoreboardData {
@@ -132,6 +137,10 @@ export interface RankedMatchDetail {
   spell2Name: string;
   primaryStyleIcon: string;
   subStyleIcon: string;
+  postScore: number;
+  postScoreRank: number;
+  isMvp: boolean;
+  isAce: boolean;
 }
 
 export interface RankDataPoint {

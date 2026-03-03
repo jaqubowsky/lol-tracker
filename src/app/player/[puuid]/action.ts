@@ -8,6 +8,7 @@ import {
   getMatch,
 } from "@/lib/riot-api";
 import { loadStaticData, getSpellName, getRuneIcon } from "@/lib/game-checker";
+import { computePostScores } from "@/lib/post-score";
 import { API_BATCH_SIZE, API_BATCH_SIZE_SMALL } from "@/lib/config";
 import type {
   PlayerDetail,
@@ -134,6 +135,27 @@ export async function fetchRankedMatches(
           const primaryStyleIcon = primaryStyleId ? getRuneIcon(primaryStyleId) : "";
           const subStyleIcon = subStyleId ? getRuneIcon(subStyleId) : "";
 
+          // Compute POST Scores for all participants in this match
+          const scoreInputs = match.info.participants.map((mp) => ({
+            puuid: mp.puuid,
+            kills: mp.kills,
+            deaths: mp.deaths,
+            assists: mp.assists,
+            totalMinionsKilled: mp.totalMinionsKilled ?? 0,
+            neutralMinionsKilled: mp.neutralMinionsKilled ?? 0,
+            totalDamageDealtToChampions: mp.totalDamageDealtToChampions,
+            goldEarned: mp.goldEarned,
+            visionScore: mp.visionScore,
+            totalDamageDealtToObjectives: mp.totalDamageDealtToObjectives,
+            timeCCingOthers: mp.timeCCingOthers,
+            teamPosition: mp.teamPosition,
+            individualPosition: mp.individualPosition,
+            teamId: mp.teamId,
+            win: mp.win,
+          }));
+          const scoreResults = computePostScores(scoreInputs, match.info.gameDuration, matchId);
+          const playerScore = scoreResults.find((r) => r.puuid === puuid);
+
           return {
             matchId,
             win: participant.win,
@@ -152,6 +174,10 @@ export async function fetchRankedMatches(
             spell2Name,
             primaryStyleIcon,
             subStyleIcon,
+            postScore: playerScore?.postScore ?? 0,
+            postScoreRank: playerScore?.postScoreRank ?? 0,
+            isMvp: playerScore?.isMvp ?? false,
+            isAce: playerScore?.isAce ?? false,
           } satisfies RankedMatchDetail;
         } catch {
           return null;

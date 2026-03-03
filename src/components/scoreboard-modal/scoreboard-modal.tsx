@@ -8,10 +8,11 @@ import { resolveFriend } from "@/components/add-friend-form/action";
 import { checkRateLimit } from "@/utils/rate-limit-event";
 import { getFriends, addFriend as storageAddFriend, removeFriend as storageRemoveFriend } from "@/utils/storage";
 import type { ScoreboardData, ScoreboardParticipant, Region, RuneTreeInfo } from "@/utils/types";
-import { partyLabel } from "@/utils/format";
+import { partyLabel, getPostScoreColor } from "@/utils/format";
 import { getTierColorClass } from "@/lib/rank-utils";
 import { RuneDetailModal } from "@/components/rune-detail-modal";
 import { Tooltip } from "@/components/tooltip";
+import { ScoreboardChart, type ChartMetric } from "./scoreboard-charts";
 
 const DDRAGON_IMG = "https://ddragon.leagueoflegends.com/cdn/img";
 
@@ -102,12 +103,13 @@ function TeamTable({
         <table className="w-full text-xs table-fixed">
           <thead>
             <tr className="text-text-muted uppercase text-[10px] tracking-wider">
-              <th className="text-left py-1.5 px-2 w-[36%]">Gracz</th>
+              <th className="text-left py-1.5 px-2 w-[32%]">Gracz</th>
               <th className="text-center py-1.5 px-1 w-[8%]">KDA</th>
               <th className="text-center py-1.5 px-1 hidden sm:table-cell w-[5%]">CS</th>
               <th className="text-center py-1.5 px-1 hidden md:table-cell w-[7%]">DMG</th>
               <th className="text-center py-1.5 px-1 hidden sm:table-cell w-[7%]">Zloto</th>
               <th className="text-center py-1.5 px-1 hidden md:table-cell w-[5%]">Wizja</th>
+              <th className="text-center py-1.5 px-1 hidden sm:table-cell w-[9%]">POST Score</th>
               <th className="text-center py-1.5 px-1 hidden sm:table-cell">Przedmioty</th>
             </tr>
           </thead>
@@ -287,6 +289,28 @@ function TeamTable({
                     {p.visionScore}
                   </td>
 
+                  {/* POST Score */}
+                  <td className="text-center py-1.5 px-1 hidden sm:table-cell">
+                    <div className="flex items-center justify-center gap-1">
+                      <span className={`text-[11px] font-bold ${getPostScoreColor(p.postScore)}`}>
+                        {p.postScore.toFixed(1)}
+                      </span>
+                      {p.isMvp ? (
+                        <span className="text-[8px] font-bold px-1.5 py-px rounded-full bg-[#ffb928] text-white leading-tight">
+                          MVP
+                        </span>
+                      ) : p.isAce ? (
+                        <span className="text-[8px] font-bold px-1.5 py-px rounded-full bg-[#8b5cf6] text-white leading-tight">
+                          ACE
+                        </span>
+                      ) : p.postScoreRank > 0 ? (
+                        <span className="text-[8px] font-medium px-1.5 py-px rounded-full bg-bg-surface text-text-muted leading-tight">
+                          {p.postScoreRank}{p.postScoreRank === 1 ? "st" : p.postScoreRank === 2 ? "nd" : p.postScoreRank === 3 ? "rd" : "th"}
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
+
                   {/* Items */}
                   <td className="py-1.5 px-1 hidden sm:table-cell">
                     <div className="flex gap-[2px] justify-center">
@@ -346,6 +370,7 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
   const [runeTreesData, setRuneTreesData] = useState<Record<number, RuneTreeInfo>>({});
   const [itemDescMap, setItemDescMap] = useState<Record<number, string>>({});
   const [runePlayer, setRunePlayer] = useState<ScoreboardParticipant | null>(null);
+  const [activeTab, setActiveTab] = useState<"table" | ChartMetric>("table");
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -461,6 +486,32 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
           </button>
         </div>
 
+        {/* Tab bar */}
+        {scoreboard && (
+          <div className="flex gap-1 px-3 sm:px-5 py-2 border-b border-gold-dark/30 overflow-x-auto">
+            {([
+              ["table", "Tablica"],
+              ["damage", "Obrazenia"],
+              ["gold", "Zloto"],
+              ["vision", "Wizja"],
+              ["cs", "CS"],
+              ["postScore", "POST Score"],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`text-[10px] uppercase tracking-wider px-2.5 py-1 border rounded-sm cursor-pointer transition-colors whitespace-nowrap ${
+                  activeTab === key
+                    ? "bg-gold-primary/20 text-gold-bright border-gold-primary/40"
+                    : "text-text-muted hover:text-text-primary border-transparent"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Content */}
         <div className="p-2 sm:p-4">
           {loading && (
@@ -481,7 +532,7 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
             </div>
           )}
 
-          {scoreboard && ddVersion && (
+          {scoreboard && ddVersion && activeTab === "table" && (
             <>
               <TeamTable
                 participants={scoreboard.participants}
@@ -515,6 +566,15 @@ export function ScoreboardModal({ matchId, playerPuuid, knownPlayersMap, region,
                 itemDescMap={itemDescMap}
               />
             </>
+          )}
+
+          {scoreboard && ddVersion && activeTab !== "table" && (
+            <ScoreboardChart
+              participants={scoreboard.participants}
+              metric={activeTab}
+              playerPuuid={playerPuuid}
+              ddVersion={ddVersion}
+            />
           )}
         </div>
       </div>
