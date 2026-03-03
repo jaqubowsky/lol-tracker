@@ -22,7 +22,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:leagueoflegends.fandom.com)",
       "WebFetch(domain:www.mingweisamuel.com)",
-      "WebFetch(domain:www.riotgames.com)"
+      "WebFetch(domain:www.riotgames.com)",
+      "WebFetch(domain:data.rito.news)"
     ]
   }
 }

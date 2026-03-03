@@ -315,6 +315,12 @@ body::before {
 .music-btn-play:hover:not(:disabled) { transform: scale(1.08); }
 .music-btn-play:active:not(:disabled) { transform: scale(0.95); }
 
+/* News ticker marquee */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 /* Respect reduced-motion preference */
 @media (prefers-reduced-motion: reduce) {
   .scan-line::after,
@@ -323,7 +329,8 @@ body::before {
   .card-reveal,
   .scoreboard-backdrop,
   .scoreboard-panel,
-  .music-player-enter {
+  .music-player-enter,
+  .news-marquee {
     animation: none !important;
   }
 }

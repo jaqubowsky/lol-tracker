@@ -5,6 +5,8 @@ import { Header } from "@/components/header";
 import { AddFriendForm } from "@/components/add-friend-form/add-friend-form";
 import { FriendList } from "@/components/friend-list/friend-list";
 import { ImportExport } from "@/components/import-export/import-export";
+import { NewsTicker } from "@/components/news/news-ticker";
+import { NewsModal } from "@/components/news/news-modal";
 import {
   pollFriendsStatus,
   fullRefreshFriends,
@@ -53,6 +55,7 @@ export default function Home() {
   const [pinnedPuuids, setPinnedPuuids] = useState<string[]>([]);
   const [rankChanges, setRankChanges] = useState<Record<string, "up" | "down" | null>>({});
   const [initialLoaded, setInitialLoaded] = useState(false);
+  const [newsOpenUid, setNewsOpenUid] = useState<string | null>(null);
   const friendsRef = useRef<Friend[]>([]);
   const refreshingRef = useRef(false);
   const lastRefreshRef = useRef(0);
@@ -248,6 +251,7 @@ export default function Home() {
 
   return (
     <main className="max-w-6xl mx-auto px-3 sm:px-4 pb-12 sm:pb-16">
+      <NewsTicker onOpenNews={(uid) => setNewsOpenUid(uid ?? "")} />
       <Header />
       <AddFriendForm onAdd={handleAddFriend} />
       <div className="mb-6">
@@ -310,6 +314,13 @@ export default function Home() {
           </button>
         </div>
       </div>
+
+      {newsOpenUid !== null && (
+        <NewsModal
+          onClose={() => setNewsOpenUid(null)}
+          highlightUid={newsOpenUid || undefined}
+        />
+      )}
     </main>
   );
 }
