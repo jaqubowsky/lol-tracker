@@ -135,6 +135,22 @@ export function getTierLabel(tier: string): string {
   return labels[tier] ?? tier;
 }
 
+export function getTierLabelShort(tier: string): string {
+  const labels: Record<string, string> = {
+    IRON: "I",
+    BRONZE: "B",
+    SILVER: "S",
+    GOLD: "G",
+    PLATINUM: "P",
+    EMERALD: "E",
+    DIAMOND: "D",
+    MASTER: "M",
+    GRANDMASTER: "GM",
+    CHALLENGER: "C",
+  };
+  return labels[tier] ?? tier;
+}
+
 export function getTierColor(tier: string): string {
   const colors: Record<string, string> = {
     IRON: "#6b6561",

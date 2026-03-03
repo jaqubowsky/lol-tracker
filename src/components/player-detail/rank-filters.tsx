@@ -19,7 +19,7 @@ function ToggleGroup<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="flex">
+    <div className="flex shrink-0">
       {options.map((option, i) => {
         const isActive = option.value === value;
         const isFirst = i === 0;
@@ -29,7 +29,7 @@ function ToggleGroup<T extends string>({
             key={option.value}
             onClick={() => onChange(option.value)}
             className={`
-              px-3 py-1.5 text-xs uppercase tracking-wider font-medium transition-all duration-200 cursor-pointer
+              px-2 sm:px-3 py-1.5 text-[11px] sm:text-xs uppercase tracking-wider font-medium transition-all duration-200 cursor-pointer whitespace-nowrap
               border border-gold-dark/40
               ${isFirst ? "" : "-ml-px"}
               ${isFirst ? "rounded-l" : ""} ${isLast ? "rounded-r" : ""}
@@ -64,13 +64,13 @@ const timeOptions: { value: TimeRangeFilter; label: string }[] = [
 
 export function RankFilters({ queue, timeRange, customDateRange, onQueueChange, onTimeRangeChange, onCustomDateChange }: RankFiltersProps) {
   return (
-    <div className="flex flex-wrap items-start sm:items-center gap-3 sm:gap-4 mb-6">
+    <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5 sm:gap-4 mb-6">
       <div className="flex items-center gap-2">
         <span className="text-text-muted text-[10px] uppercase tracking-widest hidden sm:inline">Kolejka</span>
         <ToggleGroup options={queueOptions} value={queue} onChange={onQueueChange} />
       </div>
-      <div className="flex items-center gap-2">
-        <span className="text-text-muted text-[10px] uppercase tracking-widest hidden sm:inline">Okres</span>
+      <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1">
+        <span className="text-text-muted text-[10px] uppercase tracking-widest hidden sm:inline shrink-0">Okres</span>
         <ToggleGroup options={timeOptions} value={timeRange} onChange={onTimeRangeChange} />
       </div>
       {timeRange === "custom" && onCustomDateChange && (

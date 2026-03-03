@@ -167,10 +167,12 @@ export function RuneDetailModal({
   const primaryTree = runeTreesData[perks.primaryStyleId];
   const subTree = runeTreesData[perks.subStyleId];
 
-  const selectedIds = new Set([
-    ...perks.primarySelections,
-    ...perks.subSelections,
-  ]);
+  const selectedIds = new Set(
+    [...perks.primarySelections, ...perks.subSelections].filter((id) => id > 0)
+  );
+
+  // Spectator API sometimes returns incomplete perkIds (only keystone or empty)
+  const hasIncompleteData = selectedIds.size < 3;
 
   return (
     <div
@@ -223,9 +225,95 @@ export function RuneDetailModal({
         {/* Divider */}
         <div className="h-px mx-3" style={{ background: "linear-gradient(90deg, transparent, rgba(50, 60, 90, 0.5), transparent)" }} />
 
-        {/* Rune trees — side by side */}
-        <div className="px-4 py-4">
-          {primaryTree && subTree ? (
+        {/* Rune trees */}
+        <div className="px-4 py-4 flex justify-center">
+          {hasIncompleteData ? (
+            /* Compact view — spectator API only returns keystone + tree IDs */
+            <div className="flex flex-col items-center gap-4 w-full">
+              {/* Trees side by side — equal width columns */}
+              <div className="flex items-center justify-center w-full">
+                {primaryTree && (
+                  <div className="flex-1 flex flex-col items-center gap-1">
+                    <span className="text-[#c8aa6e] text-[9px] font-bold uppercase tracking-[0.15em]">Główne</span>
+                    <div className="flex items-center gap-1.5">
+                      <Image
+                        src={`${DDRAGON_IMG}/${primaryTree.icon}`}
+                        alt={primaryTree.name}
+                        width={20}
+                        height={20}
+                        className="opacity-80"
+                        unoptimized
+                      />
+                      <span className="text-[#8a9ab5] text-[11px]">{primaryTree.name}</span>
+                    </div>
+                  </div>
+                )}
+                {subTree && (
+                  <div className="flex-1 flex flex-col items-center gap-1">
+                    <span className="text-[#c8aa6e] text-[9px] font-bold uppercase tracking-[0.15em]">Poboczne</span>
+                    <div className="flex items-center gap-1.5">
+                      <Image
+                        src={`${DDRAGON_IMG}/${subTree.icon}`}
+                        alt={subTree.name}
+                        width={20}
+                        height={20}
+                        className="opacity-80"
+                        unoptimized
+                      />
+                      <span className="text-[#8a9ab5] text-[11px]">{subTree.name}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Keystone — centered */}
+              {perks.primarySelections[0] && runeIconMap[perks.primarySelections[0]] && (() => {
+                const keystoneId = perks.primarySelections[0];
+                const icon = runeIconMap[keystoneId];
+                const name = runeNameMap[keystoneId] ?? "Keystone";
+                // Find keystone description from tree data
+                const keystoneDesc = primaryTree?.slots[0]?.runes.find((r) => r.id === keystoneId)?.shortDesc;
+                const tooltipContent = keystoneDesc ? (
+                  <div className="max-w-[220px]">
+                    <div className="font-bold text-white text-[11px] mb-0.5">{name}</div>
+                    <div className="text-[10px] leading-snug opacity-80">{keystoneDesc}</div>
+                  </div>
+                ) : name;
+                return (
+                  <Tooltip content={tooltipContent} delay={200}>
+                    <div className="flex flex-col items-center gap-2">
+                      <div
+                        className="rounded-full flex items-center justify-center"
+                        style={{
+                          width: 56,
+                          height: 56,
+                          background: "linear-gradient(135deg, rgba(200, 170, 110, 0.35), rgba(200, 170, 110, 0.12))",
+                          border: "1.5px solid rgba(200, 170, 110, 0.5)",
+                          boxShadow: "0 0 16px rgba(200, 170, 110, 0.25)",
+                        }}
+                      >
+                        <Image
+                          src={`${DDRAGON_IMG}/${icon}`}
+                          alt={name}
+                          width={44}
+                          height={44}
+                          className="rounded-full"
+                          unoptimized
+                        />
+                      </div>
+                      <span className="text-white text-xs font-medium">{name}</span>
+                    </div>
+                  </Tooltip>
+                );
+              })()}
+
+              {/* Limitation note */}
+              <p className="text-[#4a5a70] text-[10px] text-center italic">
+                Riot API zwraca tylko keystone w podglądzie na żywo
+              </p>
+            </div>
+          ) : primaryTree && subTree ? (
+            /* Full tree view — all rune data available (post-match) */
             <div className="flex items-start justify-center gap-6">
               {/* Primary tree */}
               <div>
@@ -254,7 +342,6 @@ export function RuneDetailModal({
               </div>
             </div>
           ) : (
-            /* Fallback: just list selected runes */
             <div className="text-center text-text-muted text-xs">
               Brak danych drzewa run
             </div>

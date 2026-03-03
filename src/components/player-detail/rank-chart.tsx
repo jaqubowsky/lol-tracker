@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import type { RankDataPoint } from "@/utils/types";
-import { rankToValue, valueToRank, getTierLabel, getTierColor, getTierColorClass, TIERS } from "@/lib/rank-utils";
+import { rankToValue, valueToRank, getTierLabel, getTierLabelShort, getTierColor, getTierColorClass, TIERS } from "@/lib/rank-utils";
 
 interface RankChartProps {
   dataPoints: RankDataPoint[];
@@ -12,9 +12,8 @@ interface RankChartProps {
 
 const CHART_WIDTH = 800;
 const CHART_HEIGHT = 300;
-const PADDING = { top: 20, right: 20, bottom: 30, left: 70 };
-const INNER_WIDTH = CHART_WIDTH - PADDING.left - PADDING.right;
-const INNER_HEIGHT = CHART_HEIGHT - PADDING.top - PADDING.bottom;
+const PADDING_DESKTOP = { top: 20, right: 20, bottom: 30, left: 70 };
+const PADDING_MOBILE = { top: 20, right: 12, bottom: 30, left: 36 };
 
 export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);    // tooltip visible
@@ -59,6 +58,10 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
     document.addEventListener("touchstart", handleTouchOutside);
     return () => document.removeEventListener("touchstart", handleTouchOutside);
   }, [isMobile, hoveredIndex]);
+
+  const PADDING = isMobile ? PADDING_MOBILE : PADDING_DESKTOP;
+  const INNER_WIDTH = CHART_WIDTH - PADDING.left - PADDING.right;
+  const INNER_HEIGHT = CHART_HEIGHT - PADDING.top - PADDING.bottom;
 
   // Visible data points (zoomed or full)
   const visibleData = useMemo(() => {
@@ -107,7 +110,7 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
       yScale: scaleY,
       points: pts,
     };
-  }, [visibleData, zoomRange]);
+  }, [visibleData, zoomRange, PADDING, INNER_WIDTH, INNER_HEIGHT]);
 
   const clearHoverTimer = useCallback(() => {
     if (hoverTimer.current) {
@@ -154,8 +157,10 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
     if (closest >= 0 && closestDist < 40) {
       e.preventDefault();
       setHoveredIndex((prev) => (prev === closest ? null : closest));
+      setEnlargedIndex((prev) => (prev === closest ? null : closest));
     } else {
       setHoveredIndex(null);
+      setEnlargedIndex(null);
     }
   }, [points]);
 
@@ -189,7 +194,7 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
       dragActivated.current = false;
       clearHoverTimer();
     }
-  }, [isMobile, points.length, clientXToSvgX, clearHoverTimer]);
+  }, [isMobile, points.length, clientXToSvgX, clearHoverTimer, PADDING.left, INNER_WIDTH]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (mouseDownX.current === null) return;
@@ -208,7 +213,7 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
     } else {
       setDragCurrent(svgX);
     }
-  }, [clientXToSvgX, DRAG_THRESHOLD]);
+  }, [clientXToSvgX, DRAG_THRESHOLD, PADDING.left, INNER_WIDTH]);
 
   const handleMouseUp = useCallback(() => {
     const wasDragging = dragActivated.current;
@@ -262,10 +267,32 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
 
   const hoveredPoint = hoveredIndex !== null ? points[hoveredIndex] : null;
 
-  // Tooltip positioning — keep within bounds
-  const tooltipLeft = hoveredPoint
-    ? Math.max(10, Math.min(90, (hoveredPoint.x / CHART_WIDTH) * 100))
-    : 0;
+  // Tooltip positioning — keep within bounds, use pixel-based on mobile
+  const getTooltipStyle = (): React.CSSProperties => {
+    if (!hoveredPoint) return { display: "none" };
+
+    const leftPct = (hoveredPoint.x / CHART_WIDTH) * 100;
+    const topPct = (hoveredPoint.y / CHART_HEIGHT) * 100;
+
+    if (isMobile) {
+      // On mobile: center tooltip, position above point but clamp to container
+      const clampedLeft = Math.max(15, Math.min(85, leftPct));
+      const isNearTop = topPct < 35;
+      return {
+        left: `${clampedLeft}%`,
+        ...(isNearTop
+          ? { top: `${topPct + 8}%`, transform: "translate(-50%, 0)" }
+          : { top: `${topPct}%`, transform: "translate(-50%, -120%)" }
+        ),
+      };
+    }
+
+    return {
+      left: `${Math.max(10, Math.min(90, leftPct))}%`,
+      top: `${topPct}%`,
+      transform: "translate(-50%, -120%)",
+    };
+  };
 
   // Drag selection rectangle — both values already clamped to chart bounds
   const selectionX = isDragging ? Math.min(dragStart!, dragCurrent!) : 0;
@@ -311,8 +338,8 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
 
       <svg
         viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-        className={`w-full h-auto ${isDragging ? "cursor-col-resize" : "touch-none"}`}
-        style={{ userSelect: "none" }}
+        className={`w-full h-auto ${isDragging ? "cursor-col-resize" : ""}`}
+        style={{ userSelect: "none", touchAction: "pan-y" }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -329,6 +356,9 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
         {/* Tier boundary grid lines */}
         {tierBoundaries.map((b, i) => {
           const y = PADDING.top + INNER_HEIGHT - ((b.value - minValue) / (maxValue - minValue)) * INNER_HEIGHT;
+          const label = isMobile
+            ? `${getTierLabelShort(b.tier)}${b.division}`
+            : `${getTierLabel(b.tier)} ${b.division}`;
           return (
             <g key={i}>
               <line
@@ -341,15 +371,15 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
                 strokeDasharray="4 4"
               />
               <text
-                x={PADDING.left - 8}
+                x={PADDING.left - 4}
                 y={y + 3}
                 textAnchor="end"
                 fill={getTierColor(b.tier)}
-                fontSize="10"
+                fontSize={isMobile ? "9" : "10"}
                 fontFamily="var(--font-body)"
                 opacity={0.7}
               >
-                {getTierLabel(b.tier)} {b.division}
+                {label}
               </text>
             </g>
           );
@@ -373,7 +403,7 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
             key={i}
             cx={p.x}
             cy={p.y}
-            r={enlargedIndex === i ? 5 : 3}
+            r={enlargedIndex === i ? 5 : isMobile ? 4 : 3}
             fill={p.data.match.win ? "var(--color-win)" : "var(--color-loss)"}
             stroke={enlargedIndex === i ? "#fff" : "none"}
             strokeWidth={1.5}
@@ -385,8 +415,8 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
           />
         ))}
 
-        {/* Invisible hover zones for easier targeting */}
-        {!isDragging && points.map((p, i) => (
+        {/* Invisible hover zones for easier tooltip targeting (no click — click is on dots only) */}
+        {!isDragging && !isMobile && points.map((p, i) => (
           <rect
             key={`hover-${i}`}
             x={p.x - (INNER_WIDTH / points.length) / 2}
@@ -394,10 +424,9 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
             width={INNER_WIDTH / points.length}
             height={INNER_HEIGHT}
             fill="transparent"
-            style={{ cursor: "pointer" }}
-            onMouseEnter={() => { if (!isMobile) handlePointInteraction(i); }}
-            onMouseLeave={() => { clearHoverTimer(); if (!isMobile) { setHoveredIndex(null); setEnlargedIndex(null); } }}
-            onClick={() => onMatchClick?.(points[i].data.match.matchId)}
+            style={{ cursor: "default" }}
+            onMouseEnter={() => handlePointInteraction(i)}
+            onMouseLeave={() => { clearHoverTimer(); setHoveredIndex(null); setEnlargedIndex(null); }}
           />
         ))}
 
@@ -421,10 +450,7 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
       {hoveredPoint && !isDragging && (
         <div
           className="rank-chart-tooltip"
-          style={{
-            left: `${tooltipLeft}%`,
-            top: `${(hoveredPoint.y / CHART_HEIGHT) * 100}%`,
-          }}
+          style={getTooltipStyle()}
         >
           <div className="flex items-center gap-2 mb-1">
             <span className={`text-xs font-bold ${hoveredPoint.data.match.win ? "text-win" : "text-loss"}`}>

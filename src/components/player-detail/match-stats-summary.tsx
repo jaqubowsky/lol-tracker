@@ -93,7 +93,7 @@ export function MatchStatsSummary({ matches, ddVersion }: MatchStatsSummaryProps
   });
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 mb-6">
+    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3 mb-6">
       {statBoxes.map((stat) => (
         <div
           key={stat.label}

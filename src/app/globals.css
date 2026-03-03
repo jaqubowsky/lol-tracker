@@ -350,7 +350,6 @@ body::before {
 }
 .rank-chart-tooltip {
   position: absolute;
-  transform: translate(-50%, -120%);
   background: var(--color-bg-primary);
   border: 1px solid var(--color-gold-dark);
   padding: 8px 10px;
@@ -363,7 +362,12 @@ body::before {
   );
 }
 @media (max-width: 639px) {
+  .rank-chart-container {
+    padding: 8px;
+  }
   .rank-chart-tooltip {
     pointer-events: auto;
+    max-width: 180px;
+    font-size: 10px;
   }
 }
