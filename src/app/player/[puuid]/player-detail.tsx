@@ -246,7 +246,9 @@ export function PlayerDetailPage({ puuid }: PlayerDetailPageProps) {
         const result = await fetchPage(customRange, currentStart);
         if (requestId.current !== id) return;
 
-        accumulated = [...accumulated, ...result.matches];
+        const existingIds = new Set(accumulated.map((m) => m.matchId));
+        const newMatches = result.matches.filter((m) => !existingIds.has(m.matchId));
+        accumulated = [...accumulated, ...newMatches];
         moreAvailable = result.hasMore;
         currentStart += 50;
       }
@@ -451,7 +453,6 @@ export function PlayerDetailPage({ puuid }: PlayerDetailPageProps) {
           friendMap={knownPlayersMap}
           region={region}
           rankProgression={chartData}
-          totalLoaded={matches.length}
           hasMore={hasMore}
           loadingMore={loadingMore}
           onLoadMore={handleLoadMore}

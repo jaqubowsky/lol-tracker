@@ -1,6 +1,7 @@
 import { DDRAGON_URL } from "./config";
 import { getActiveGame } from "./riot-api";
 import type { Friend, GameInfo, RuneTreeInfo } from "@/utils/types";
+import { getCachedDdragon, setCachedDdragon } from "./turso";
 
 /** Strip HTML tags and decode basic entities for tooltip text */
 function stripHtml(html: string): string {
@@ -22,6 +23,25 @@ let runeMap: Record<number, { name: string; icon: string }> = {};
 let runeTreesMap: Record<number, RuneTreeInfo> = {};
 let itemMap: Record<number, { name: string; description: string }> = {};
 let cachedDdVersion: string | null = null;
+
+async function fetchDdragonWithCache(
+  url: string,
+  cacheKey: string,
+  version: string,
+  revalidate: number
+): Promise<unknown> {
+  const cached = await getCachedDdragon(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  const res = await fetch(url, { next: { revalidate } });
+  if (!res.ok) {
+    throw new Error(`DDragon fetch failed (${cacheKey}): ${res.status}`);
+  }
+
+  const rawText = await res.text();
+  setCachedDdragon(cacheKey, version, rawText);
+  return JSON.parse(rawText);
+}
 
 // In-flight dedup so concurrent calls don't trigger multiple fetches
 let ddLoadPromise: Promise<string> | null = null;
@@ -52,51 +72,48 @@ async function _loadStaticData(): Promise<string> {
   const version = versions[0];
 
   // Champion + spell + rune + item data — versioned URLs are effectively immutable
-  const [champRes, spellRes, runesRes, itemRes] = await Promise.all([
-    fetch(`${DDRAGON_URL}/cdn/${version}/data/en_US/champion.json`, {
-      next: { revalidate: 86400 },
-    }),
-    fetch(`${DDRAGON_URL}/cdn/${version}/data/pl_PL/summoner.json`, {
-      next: { revalidate: 86400 },
-    }),
-    fetch(`${DDRAGON_URL}/cdn/${version}/data/pl_PL/runesReforged.json`, {
-      next: { revalidate: 86400 },
-    }),
-    fetch(`${DDRAGON_URL}/cdn/${version}/data/pl_PL/item.json`, {
-      next: { revalidate: 86400 },
-    }),
-  ]);
-  if (!champRes.ok) {
-    throw new Error(`DDragon champion data fetch failed: ${champRes.status}`);
-  }
-  if (!spellRes.ok) {
-    throw new Error(`DDragon spell data fetch failed: ${spellRes.status}`);
-  }
-  if (!runesRes.ok) {
-    throw new Error(`DDragon runes data fetch failed: ${runesRes.status}`);
-  }
-  if (!itemRes.ok) {
-    throw new Error(`DDragon item data fetch failed: ${itemRes.status}`);
-  }
-
-  const champData = await champRes.json();
+  const [champData, spellData, runesData, itemData] = await Promise.all([
+    fetchDdragonWithCache(
+      `${DDRAGON_URL}/cdn/${version}/data/en_US/champion.json`,
+      `champion:${version}`,
+      version,
+      31536000
+    ),
+    fetchDdragonWithCache(
+      `${DDRAGON_URL}/cdn/${version}/data/pl_PL/summoner.json`,
+      `spell:${version}`,
+      version,
+      31536000
+    ),
+    fetchDdragonWithCache(
+      `${DDRAGON_URL}/cdn/${version}/data/pl_PL/runesReforged.json`,
+      `runes:${version}`,
+      version,
+      31536000
+    ),
+    fetchDdragonWithCache(
+      `${DDRAGON_URL}/cdn/${version}/data/pl_PL/item.json`,
+      `item:${version}`,
+      version,
+      31536000
+    ),
+  ]) as [
+    { data: Record<string, { key: string; id: string }> },
+    { data: Record<string, { key: string; id: string; name: string; description: string }> },
+    Array<{
+      id: number; key: string; name: string; icon: string;
+      slots: Array<{ runes: Array<{ id: number; key: string; name: string; icon: string; shortDesc?: string }> }>;
+    }>,
+    { data: Record<string, { name: string; description: string }> },
+  ];
   const newChampionMap: Record<number, string> = {};
-  for (const champ of Object.values(champData.data) as Array<{
-    key: string;
-    id: string;
-  }>) {
+  for (const champ of Object.values(champData.data)) {
     newChampionMap[parseInt(champ.key, 10)] = champ.id;
   }
   championMap = newChampionMap;
 
-  const spellData = await spellRes.json();
   const newSpellMap: Record<number, { id: string; name: string; description: string }> = {};
-  for (const spell of Object.values(spellData.data) as Array<{
-    key: string;
-    id: string;
-    name: string;
-    description: string;
-  }>) {
+  for (const spell of Object.values(spellData.data)) {
     newSpellMap[parseInt(spell.key, 10)] = {
       id: spell.id,
       name: spell.name,
@@ -106,16 +123,9 @@ async function _loadStaticData(): Promise<string> {
   spellMap = newSpellMap;
 
   // Build rune map + full tree data
-  const runesData = await runesRes.json();
   const newRuneMap: Record<number, { name: string; icon: string }> = {};
   const newRuneTreesMap: Record<number, RuneTreeInfo> = {};
-  for (const tree of runesData as Array<{
-    id: number;
-    key: string;
-    name: string;
-    icon: string;
-    slots: Array<{ runes: Array<{ id: number; key: string; name: string; icon: string; shortDesc?: string }> }>;
-  }>) {
+  for (const tree of runesData) {
     // Map the tree itself (perkStyleId)
     newRuneMap[tree.id] = { name: tree.name, icon: tree.icon };
     // Build full tree info
@@ -159,9 +169,8 @@ async function _loadStaticData(): Promise<string> {
   runeTreesMap = newRuneTreesMap;
 
   // Build item map: itemId → { name, description }
-  const itemData = await itemRes.json();
   const newItemMap: Record<number, { name: string; description: string }> = {};
-  for (const [key, item] of Object.entries(itemData.data) as Array<[string, { name: string; description: string }]>) {
+  for (const [key, item] of Object.entries(itemData.data)) {
     newItemMap[parseInt(key, 10)] = {
       name: item.name,
       description: stripHtml(item.description),

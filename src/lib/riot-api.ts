@@ -5,6 +5,7 @@ import {
   REGIONAL_URL,
   getPlatformUrl,
 } from "./config";
+import { getCachedMatch, getCachedMatchBatch, setCachedMatch } from "./turso";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -216,11 +217,11 @@ const championMasterySchema = z.object({
 // ---------------------------------------------------------------------------
 // Revalidation durations (seconds) for Next.js Data Cache
 // ---------------------------------------------------------------------------
-const REVALIDATE_IMMUTABLE = 3600;  // 1h — match details never change
-const REVALIDATE_PROFILE = 1800;    // 30min — profile icons/level rarely change
-const REVALIDATE_RANK = 300;        // 5min — rank only changes after a game ends
-const REVALIDATE_MASTERY = 300;     // 5min — mastery changes slowly
-const REVALIDATE_MATCH_LIST = 300;  // 5min — matches don't appear that fast
+const REVALIDATE_IMMUTABLE = 31536000; // 1 year — match details never change (Turso L2 is permanent)
+const REVALIDATE_PROFILE = 600;     // 10min — profile icons/level rarely change
+const REVALIDATE_RANK = 60;         // 1min — aligned with poll interval for fast rank updates
+const REVALIDATE_MASTERY = 120;     // 2min — mastery changes after games
+const REVALIDATE_MATCH_LIST = 60;   // 1min — new matches appear quickly after a game ends
 // Spectator: no cache (must be real-time)
 
 // ---------------------------------------------------------------------------
@@ -289,24 +290,49 @@ export async function getMatchHistory(puuid: string, count: number = 5) {
   return z.array(z.string()).parse(await res.json());
 }
 
-export async function getMatch(matchId: string) {
+// Request-scoped pre-warmed cache from batch Turso reads
+let prefetchedMatches: Map<string, string> | null = null;
+
+/**
+ * Pre-warm Turso cache for a batch of match IDs in one query.
+ * Returns the Map so callers can check which IDs are cached.
+ */
+export async function prefetchMatchCache(matchIds: string[]): Promise<Map<string, string>> {
+  prefetchedMatches = await getCachedMatchBatch(matchIds);
+  return prefetchedMatches;
+}
+
+export function clearMatchPrefetch(): void {
+  prefetchedMatches = null;
+}
+
+async function fetchMatchRaw(matchId: string): Promise<unknown> {
+  // Check pre-warmed batch cache first
+  const prefetched = prefetchedMatches?.get(matchId);
+  if (prefetched) return JSON.parse(prefetched);
+
+  // Fall back to individual Turso lookup
+  const cached = await getCachedMatch(matchId);
+  if (cached) return JSON.parse(cached);
+
   const res = await riotFetch(
     `/lol/match/v5/matches/${matchId}`,
     REGIONAL_URL,
     { revalidate: REVALIDATE_IMMUTABLE, tags: [`match:${matchId}`] }
   );
   if (!res.ok) throw new Error("Błąd serwera");
-  return matchSchema.parse(await res.json());
+
+  const rawText = await res.text();
+  setCachedMatch(matchId, rawText);
+  return JSON.parse(rawText);
+}
+
+export async function getMatch(matchId: string) {
+  return matchSchema.parse(await fetchMatchRaw(matchId));
 }
 
 export async function getMatchScoreboard(matchId: string) {
-  const res = await riotFetch(
-    `/lol/match/v5/matches/${matchId}`,
-    REGIONAL_URL,
-    { revalidate: REVALIDATE_IMMUTABLE, tags: [`match:${matchId}`] }
-  );
-  if (!res.ok) throw new Error("Błąd serwera");
-  return scoreboardMatchSchema.parse(await res.json());
+  return scoreboardMatchSchema.parse(await fetchMatchRaw(matchId));
 }
 
 export async function getChampionMastery(puuid: string, count: number = 3, region: Region = "eun1") {

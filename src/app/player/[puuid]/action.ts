@@ -6,10 +6,13 @@ import {
   getRankedEntries,
   getMatchHistoryFiltered,
   getMatch,
+  prefetchMatchCache,
+  clearMatchPrefetch,
 } from "@/lib/riot-api";
 import { loadStaticData, getSpellName, getRuneIcon } from "@/lib/game-checker";
 import { computePostScores } from "@/lib/post-score";
 import { API_BATCH_SIZE, API_BATCH_SIZE_SMALL } from "@/lib/config";
+import { getPlayerMatchIds, savePlayerMatches, type PlayerMatchEntry } from "@/lib/turso";
 import type {
   PlayerDetail,
   RankInfo,
@@ -85,31 +88,90 @@ export async function fetchRankedMatches(
   const startTimeEpoch = options.startTime ?? getStartTime(timeRange);
   const count = 50;
 
-  const matchIds = await getMatchHistoryFiltered(puuid, {
-    queue: queueId,
-    startTime: startTimeEpoch,
-    endTime: options.endTime,
-    start: options.start,
-    count,
-    type: "ranked",
-  });
+  // Fetch fresh IDs from Riot + historical IDs from Turso in parallel
+  const [riotMatchIds, tursoEntries] = await Promise.all([
+    getMatchHistoryFiltered(puuid, {
+      queue: queueId,
+      startTime: startTimeEpoch,
+      endTime: options.endTime,
+      start: options.start,
+      count,
+      type: "ranked",
+    }),
+    options.start === undefined || options.start === 0
+      ? getPlayerMatchIds(puuid, {
+          queueId: queueId,
+          startTime: startTimeEpoch,
+          endTime: options.endTime,
+        })
+      : Promise.resolve([]),
+  ]);
 
-  const hasMore = matchIds.length === count;
+  const hasMore = riotMatchIds.length === count;
 
-  if (matchIds.length === 0) return { matches: [], hasMore: false };
+  // Merge Riot + Turso IDs, deduplicate
+  const seen = new Set<string>();
+  const allMatchIds: string[] = [];
+  for (const id of riotMatchIds) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      allMatchIds.push(id);
+    }
+  }
+  for (const entry of tursoEntries) {
+    if (!seen.has(entry.matchId)) {
+      seen.add(entry.matchId);
+      allMatchIds.push(entry.matchId);
+    }
+  }
 
-  // Fetch match details in small batches to avoid exhausting rate limits
-  const BATCH_SIZE = API_BATCH_SIZE;
+  if (allMatchIds.length === 0) return { matches: [], hasMore: false };
+
+  // Pre-warm Turso cache: 1 batch query instead of N individual lookups
+  const cachedMatchData = await prefetchMatchCache(allMatchIds);
+
+  // Split IDs: cached ones can be processed in large parallel batches (no API calls),
+  // uncached ones need small batches to respect Riot rate limits
+  const cachedIds = allMatchIds.filter((id) => cachedMatchData.has(id));
+  const uncachedIds = allMatchIds.filter((id) => !cachedMatchData.has(id));
+
   const results: (RankedMatchDetail | null)[] = [];
+  const newTursoEntries: PlayerMatchEntry[] = [];
 
-  for (let i = 0; i < matchIds.length; i += BATCH_SIZE) {
-    const batch = matchIds.slice(i, i + BATCH_SIZE);
+  // Process all cached matches in one big parallel batch (just JSON.parse, no network)
+  const allIds = [...cachedIds, ...uncachedIds];
+  const BATCH_SIZE = API_BATCH_SIZE;
+
+  // Cached: process all at once; Uncached: batch by API_BATCH_SIZE
+  const cachedSet = new Set(cachedIds);
+  let i = 0;
+  while (i < allIds.length) {
+    // Grab as many consecutive cached IDs as possible, or one API batch of uncached
+    let end = i;
+    if (cachedSet.has(allIds[i])) {
+      while (end < allIds.length && cachedSet.has(allIds[end])) end++;
+    } else {
+      end = Math.min(i + BATCH_SIZE, allIds.length);
+    }
+    const batch = allIds.slice(i, end);
+    i = end;
+
     const batchResults = await Promise.all(
       batch.map(async (matchId) => {
         try {
           const match = await getMatch(matchId);
           const participant = match.info.participants.find((p) => p.puuid === puuid);
           if (!participant) return null;
+
+          // Track for Turso index — index for ALL participants
+          for (const p of match.info.participants) {
+            newTursoEntries.push({
+              puuid: p.puuid,
+              matchId,
+              queueId: match.info.queueId,
+              gameCreation: match.info.gameCreation,
+            });
+          }
 
           // Same-team participants (same win value = same team), excluding self
           const teammates = match.info.participants
@@ -187,7 +249,18 @@ export async function fetchRankedMatches(
     results.push(...batchResults);
   }
 
-  return { matches: results.filter((m): m is RankedMatchDetail => m !== null), hasMore };
+  // Clean up prefetch cache
+  clearMatchPrefetch();
+
+  // Fire-and-forget: save match metadata to Turso for future visits
+  // Entries include all 10 participants per match, so visiting one profile
+  // pre-populates the index for every player in those games
+  savePlayerMatches(newTursoEntries);
+
+  const matches = results.filter((m): m is RankedMatchDetail => m !== null);
+  matches.sort((a, b) => b.gameCreation - a.gameCreation);
+
+  return { matches, hasMore };
 }
 
 /** Resolve a list of puuids to gameName#tagLine + profileIconId. Silently skips failures. */

@@ -12,10 +12,13 @@ import {
   getMatchHistory,
   getMatch,
   getChampionMastery,
+  prefetchMatchCache,
+  clearMatchPrefetch,
 } from "@/lib/riot-api";
 import { computePostScores } from "@/lib/post-score";
 import { API_BATCH_SIZE_SMALL } from "@/lib/config";
 import { RATE_LIMIT_MARKER } from "@/utils/rate-limit-event";
+import { savePlayerMatches, type PlayerMatchEntry } from "@/lib/turso";
 import type { Friend, Region, RankInfo, RecentMatch, ChampionMastery } from "@/utils/types";
 
 async function refreshRank(puuid: string, region: Region = "eun1"): Promise<RankInfo | null> {
@@ -33,15 +36,32 @@ async function refreshRank(puuid: string, region: Region = "eun1"): Promise<Rank
 }
 
 async function refreshMatches(puuid: string): Promise<RecentMatch[]> {
-  const matchIds = await getMatchHistory(puuid, 5);
-  const recentMatches: RecentMatch[] = [];
-  for (const matchId of matchIds) {
-    try {
-      const match = await getMatch(matchId);
-      const participant = match.info.participants.find(
-        (p) => p.puuid === puuid
-      );
-      if (participant) {
+  const matchIds = await getMatchHistory(puuid, 10);
+  if (matchIds.length === 0) return [];
+
+  // Pre-warm Turso cache so all getMatch calls hit the in-memory Map
+  await prefetchMatchCache(matchIds);
+
+  const tursoEntries: PlayerMatchEntry[] = [];
+  const results = await Promise.all(
+    matchIds.map(async (matchId) => {
+      try {
+        const match = await getMatch(matchId);
+        const participant = match.info.participants.find(
+          (p) => p.puuid === puuid
+        );
+        if (!participant) return null;
+
+        // Index all participants for cross-player cache benefit
+        for (const p of match.info.participants) {
+          tursoEntries.push({
+            puuid: p.puuid,
+            matchId,
+            queueId: match.info.queueId,
+            gameCreation: match.info.gameCreation,
+          });
+        }
+
         // Compute POST Score for this match
         const scoreInputs = match.info.participants.map((mp) => ({
           puuid: mp.puuid,
@@ -63,7 +83,7 @@ async function refreshMatches(puuid: string): Promise<RecentMatch[]> {
         const scoreResults = computePostScores(scoreInputs, match.info.gameDuration, matchId);
         const playerScore = scoreResults.find((r) => r.puuid === puuid);
 
-        recentMatches.push({
+        return {
           win: participant.win,
           championName: participant.championName,
           kills: participant.kills,
@@ -71,13 +91,16 @@ async function refreshMatches(puuid: string): Promise<RecentMatch[]> {
           assists: participant.assists,
           gameEndTimestamp: match.info.gameEndTimestamp,
           postScore: playerScore?.postScore ?? 0,
-        });
+        } satisfies RecentMatch;
+      } catch {
+        return null;
       }
-    } catch {
-      // Skip failed match fetches
-    }
-  }
-  return recentMatches;
+    })
+  );
+
+  clearMatchPrefetch();
+  savePlayerMatches(tursoEntries);
+  return results.filter((m): m is RecentMatch => m !== null);
 }
 
 async function refreshChampions(puuid: string, region: Region = "eun1"): Promise<ChampionMastery[]> {

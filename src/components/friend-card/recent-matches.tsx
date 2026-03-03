@@ -14,8 +14,9 @@ export function RecentMatches({ matches }: RecentMatchesProps) {
     );
   }
 
-  const wins = matches.filter((m) => m.win).length;
-  const losses = matches.length - wins;
+  const display = matches.slice(0, 5);
+  const wins = display.filter((m) => m.win).length;
+  const losses = display.length - wins;
   return (
     <div>
       <p className="text-text-secondary text-[10px] mb-1.5 uppercase tracking-wider font-medium leading-[15px]">
@@ -25,7 +26,7 @@ export function RecentMatches({ matches }: RecentMatchesProps) {
         </span>
       </p>
       <div className="flex gap-[3px]">
-        {matches.map((match, i) => (
+        {display.map((match, i) => (
           <div
             key={i}
             className={`
@@ -46,7 +47,7 @@ export function RecentMatches({ matches }: RecentMatchesProps) {
       </div>
       {/* POST Score values */}
       <div className="flex items-center mt-1 gap-[3px]">
-        {matches.map((match, i) => (
+        {display.map((match, i) => (
           <div
             key={i}
             className={`w-[22px] text-center text-[8px] font-bold ${getPostScoreColor(match.postScore)}`}

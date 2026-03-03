@@ -17,9 +17,29 @@ const INNER_WIDTH = CHART_WIDTH - PADDING.left - PADDING.right;
 const INNER_HEIGHT = CHART_HEIGHT - PADDING.top - PADDING.bottom;
 
 export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProps) {
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);    // tooltip visible
+  const [enlargedIndex, setEnlargedIndex] = useState<number | null>(null);  // dot enlarged
   const [isMobile, setIsMobile] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Zoom state: indices into dataPoints
+  const [zoomRange, setZoomRange] = useState<[number, number] | null>(null);
+
+  // Drag selection state — drag only activates after moving past DRAG_THRESHOLD
+  const DRAG_THRESHOLD = 10;
+  const [dragStart, setDragStart] = useState<number | null>(null);
+  const [dragCurrent, setDragCurrent] = useState<number | null>(null);
+  const mouseDownX = useRef<number | null>(null); // raw mousedown position
+  const dragActivated = useRef(false);
+  const isDragging = dragActivated.current && dragStart !== null && dragCurrent !== null;
+
+  // Hover delay timer
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reset zoom when data changes
+  useEffect(() => {
+    setZoomRange(null);
+  }, [dataPoints]);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 640);
@@ -40,12 +60,18 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
     return () => document.removeEventListener("touchstart", handleTouchOutside);
   }, [isMobile, hoveredIndex]);
 
+  // Visible data points (zoomed or full)
+  const visibleData = useMemo(() => {
+    if (!zoomRange) return dataPoints;
+    return dataPoints.slice(zoomRange[0], zoomRange[1] + 1);
+  }, [dataPoints, zoomRange]);
+
   const { minValue, maxValue, tierBoundaries, xScale, yScale, points } = useMemo(() => {
-    if (dataPoints.length === 0) {
+    if (visibleData.length === 0) {
       return { minValue: 0, maxValue: 400, tierBoundaries: [], xScale: () => 0, yScale: () => 0, points: [] };
     }
 
-    const values = dataPoints.map((d) => d.value);
+    const values = visibleData.map((d) => d.value);
     const rawMin = Math.min(...values);
     const rawMax = Math.max(...values);
     const padding = Math.max((rawMax - rawMin) * 0.15, 50);
@@ -62,14 +88,15 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
     }
 
     const scaleX = (index: number) =>
-      PADDING.left + (index / Math.max(dataPoints.length - 1, 1)) * INNER_WIDTH;
+      PADDING.left + (index / Math.max(visibleData.length - 1, 1)) * INNER_WIDTH;
     const scaleY = (value: number) =>
       PADDING.top + INNER_HEIGHT - ((value - yMin) / (yMax - yMin)) * INNER_HEIGHT;
 
-    const pts = dataPoints.map((d, i) => ({
+    const pts = visibleData.map((d, i) => ({
       x: scaleX(i),
       y: scaleY(d.value),
       data: d,
+      globalIndex: zoomRange ? zoomRange[0] + i : i,
     }));
 
     return {
@@ -80,16 +107,27 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
       yScale: scaleY,
       points: pts,
     };
-  }, [dataPoints]);
+  }, [visibleData, zoomRange]);
+
+  const clearHoverTimer = useCallback(() => {
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+  }, []);
 
   const handlePointInteraction = useCallback((index: number) => {
     if (isMobile) {
-      // Toggle on tap — tap same dot again to dismiss
       setHoveredIndex((prev) => (prev === index ? null : index));
+      setEnlargedIndex((prev) => (prev === index ? null : index));
     } else {
-      setHoveredIndex(index);
+      setEnlargedIndex(index);
+      clearHoverTimer();
+      hoverTimer.current = setTimeout(() => {
+        setHoveredIndex(index);
+      }, 500);
     }
-  }, [isMobile]);
+  }, [isMobile, clearHoverTimer]);
 
   const handleSvgTouch = useCallback((e: React.TouchEvent<SVGSVGElement>) => {
     if (!containerRef.current) return;
@@ -121,6 +159,93 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
     }
   }, [points]);
 
+  // Convert client X position to SVG X coordinate
+  const clientXToSvgX = useCallback((clientX: number, svgEl: SVGSVGElement) => {
+    const rect = svgEl.getBoundingClientRect();
+    return ((clientX - rect.left) / rect.width) * CHART_WIDTH;
+  }, []);
+
+  // Find the closest data point index for a given SVG X coordinate
+  const svgXToPointIndex = useCallback((svgX: number) => {
+    if (points.length === 0) return 0;
+    let closest = 0;
+    let closestDist = Infinity;
+    for (let i = 0; i < points.length; i++) {
+      const dist = Math.abs(points[i].x - svgX);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = i;
+      }
+    }
+    return closest;
+  }, [points]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (isMobile || points.length < 3) return;
+    const svgX = clientXToSvgX(e.clientX, e.currentTarget);
+    if (svgX >= PADDING.left && svgX <= PADDING.left + INNER_WIDTH) {
+      // Record position but don't activate drag yet — wait for movement past threshold
+      mouseDownX.current = svgX;
+      dragActivated.current = false;
+      clearHoverTimer();
+    }
+  }, [isMobile, points.length, clientXToSvgX, clearHoverTimer]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (mouseDownX.current === null) return;
+    const rawX = clientXToSvgX(e.clientX, e.currentTarget);
+    const svgX = Math.max(PADDING.left, Math.min(PADDING.left + INNER_WIDTH, rawX));
+
+    if (!dragActivated.current) {
+      // Check if we've moved past the threshold to start dragging
+      if (Math.abs(svgX - mouseDownX.current) >= DRAG_THRESHOLD) {
+        dragActivated.current = true;
+        setDragStart(mouseDownX.current);
+        setDragCurrent(svgX);
+        setHoveredIndex(null);
+        setEnlargedIndex(null);
+      }
+    } else {
+      setDragCurrent(svgX);
+    }
+  }, [clientXToSvgX, DRAG_THRESHOLD]);
+
+  const handleMouseUp = useCallback(() => {
+    const wasDragging = dragActivated.current;
+    mouseDownX.current = null;
+    dragActivated.current = false;
+
+    if (!wasDragging || dragStart === null || dragCurrent === null) {
+      // Was a click, not a drag — let dot onClick handle it
+      setDragStart(null);
+      setDragCurrent(null);
+      return;
+    }
+
+    const startIdx = svgXToPointIndex(Math.min(dragStart, dragCurrent));
+    const endIdx = svgXToPointIndex(Math.max(dragStart, dragCurrent));
+
+    setDragStart(null);
+    setDragCurrent(null);
+
+    if (endIdx - startIdx < 1) return;
+
+    const globalStart = points[startIdx].globalIndex;
+    const globalEnd = points[endIdx].globalIndex;
+    setZoomRange([globalStart, globalEnd]);
+    setHoveredIndex(null);
+  }, [dragStart, dragCurrent, svgXToPointIndex, points]);
+
+  // Handle mouse leaving SVG — cancel everything
+  const handleMouseLeave = useCallback(() => {
+    mouseDownX.current = null;
+    dragActivated.current = false;
+    setDragStart(null);
+    setDragCurrent(null);
+    clearHoverTimer();
+    if (!isMobile) { setHoveredIndex(null); setEnlargedIndex(null); }
+  }, [isMobile, clearHoverTimer]);
+
   if (dataPoints.length === 0) {
     return (
       <div className="flex items-center justify-center h-[200px] border border-gold-dark/20 bg-bg-secondary/30 rounded">
@@ -142,8 +267,37 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
     ? Math.max(10, Math.min(90, (hoveredPoint.x / CHART_WIDTH) * 100))
     : 0;
 
+  // Drag selection rectangle — both values already clamped to chart bounds
+  const selectionX = isDragging ? Math.min(dragStart!, dragCurrent!) : 0;
+  const selectionEnd = isDragging ? Math.max(dragStart!, dragCurrent!) : 0;
+  const selectionWidth = isDragging ? selectionEnd - selectionX : 0;
+
   return (
     <div className="rank-chart-container relative" ref={containerRef}>
+      {/* Zoom controls */}
+      {zoomRange && (
+        <div className="flex items-center justify-end mb-1.5 gap-2">
+          <span className="text-text-muted text-[10px] uppercase tracking-wider">
+            Mecze {zoomRange[0] + 1}–{zoomRange[1] + 1} z {dataPoints.length}
+          </span>
+          <button
+            className="text-gold-primary text-[10px] uppercase tracking-wider hover:text-gold-bright transition-colors cursor-pointer"
+            onClick={() => setZoomRange(null)}
+          >
+            Resetuj zoom
+          </button>
+        </div>
+      )}
+
+      {/* Drag hint */}
+      {!zoomRange && !isMobile && dataPoints.length > 5 && (
+        <div className="flex items-center justify-end mb-1">
+          <span className="text-text-muted text-[10px] uppercase tracking-wider opacity-50">
+            Zaznacz obszar aby przybliżyć
+          </span>
+        </div>
+      )}
+
       {/* Mobile rotate hint */}
       <div className="flex sm:hidden items-center justify-center gap-1.5 mb-2 text-text-muted text-[10px] uppercase tracking-wider">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="opacity-60">
@@ -157,8 +311,12 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
 
       <svg
         viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-        className="w-full h-auto touch-none"
-        onMouseLeave={() => { if (!isMobile) setHoveredIndex(null); }}
+        className={`w-full h-auto ${isDragging ? "cursor-col-resize" : "touch-none"}`}
+        style={{ userSelect: "none" }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
         onTouchStart={handleSvgTouch}
       >
         <defs>
@@ -215,19 +373,20 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
             key={i}
             cx={p.x}
             cy={p.y}
-            r={hoveredIndex === i ? 5 : 3}
+            r={enlargedIndex === i ? 5 : 3}
             fill={p.data.match.win ? "var(--color-win)" : "var(--color-loss)"}
-            stroke={hoveredIndex === i ? "#fff" : "none"}
+            stroke={enlargedIndex === i ? "#fff" : "none"}
             strokeWidth={1.5}
             className="transition-all duration-150"
-            style={{ cursor: "pointer" }}
-            onMouseEnter={() => handlePointInteraction(i)}
-            onClick={() => onMatchClick?.(p.data.match.matchId)}
+            style={{ cursor: isDragging ? "col-resize" : "pointer" }}
+            onMouseEnter={() => { if (!isDragging) handlePointInteraction(i); }}
+            onMouseLeave={() => { clearHoverTimer(); if (!isMobile) { setHoveredIndex(null); setEnlargedIndex(null); } }}
+            onClick={() => { if (!isDragging) onMatchClick?.(p.data.match.matchId); }}
           />
         ))}
 
         {/* Invisible hover zones for easier targeting */}
-        {points.map((p, i) => (
+        {!isDragging && points.map((p, i) => (
           <rect
             key={`hover-${i}`}
             x={p.x - (INNER_WIDTH / points.length) / 2}
@@ -237,13 +396,29 @@ export function RankChart({ dataPoints, friendMap, onMatchClick }: RankChartProp
             fill="transparent"
             style={{ cursor: "pointer" }}
             onMouseEnter={() => { if (!isMobile) handlePointInteraction(i); }}
+            onMouseLeave={() => { clearHoverTimer(); if (!isMobile) { setHoveredIndex(null); setEnlargedIndex(null); } }}
             onClick={() => onMatchClick?.(points[i].data.match.matchId)}
           />
         ))}
+
+        {/* Drag selection overlay */}
+        {isDragging && selectionWidth > 0 && (
+          <rect
+            x={selectionX}
+            y={PADDING.top}
+            width={selectionWidth}
+            height={INNER_HEIGHT}
+            fill="#c8aa6e"
+            fillOpacity={0.15}
+            stroke="#c8aa6e"
+            strokeOpacity={0.4}
+            strokeWidth={1}
+          />
+        )}
       </svg>
 
       {/* Tooltip */}
-      {hoveredPoint && (
+      {hoveredPoint && !isDragging && (
         <div
           className="rank-chart-tooltip"
           style={{

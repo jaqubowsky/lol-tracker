@@ -15,7 +15,6 @@ interface MatchHistoryTableProps {
   friendMap?: Map<string, string>;
   region?: Region;
   rankProgression?: RankDataPoint[];
-  totalLoaded?: number;
   hasMore?: boolean;
   loadingMore?: boolean;
   onLoadMore?: () => void;
@@ -44,7 +43,7 @@ function timeAgo(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString("pl-PL");
 }
 
-export function MatchHistoryTable({ matches, ddVersion, playerPuuid, friendMap, region, rankProgression, totalLoaded, hasMore, loadingMore, onLoadMore }: MatchHistoryTableProps) {
+export function MatchHistoryTable({ matches, ddVersion, playerPuuid, friendMap, region, rankProgression, hasMore, loadingMore, onLoadMore }: MatchHistoryTableProps) {
   const [scoreboardMatchId, setScoreboardMatchId] = useState<string | null>(null);
 
   // Build matchId → LP delta map from rank progression points
@@ -77,11 +76,9 @@ export function MatchHistoryTable({ matches, ddVersion, playerPuuid, friendMap, 
         >
           Historia meczów
         </h3>
-        {totalLoaded !== undefined && (
-          <span className="text-text-muted text-xs">
-            Załadowano {totalLoaded} meczów
-          </span>
-        )}
+        <span className="text-text-muted text-xs">
+          Załadowano {matches.length} meczów
+        </span>
       </div>
       <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-1">
         {matches.map((match) => {

@@ -7,9 +7,12 @@ import {
   getChampionMastery,
   getMatchHistory,
   getMatch,
+  prefetchMatchCache,
+  clearMatchPrefetch,
 } from "@/lib/riot-api";
 import { computePostScores } from "@/lib/post-score";
 import { loadStaticData, getChampionName } from "@/lib/game-checker";
+import { savePlayerMatches, type PlayerMatchEntry } from "@/lib/turso";
 import type { Friend, Region, RankInfo, RecentMatch, ChampionMastery } from "@/utils/types";
 
 export async function resolveFriend(
@@ -68,50 +71,72 @@ async function _resolveFriend(
     championPoints: m.championPoints,
   }));
 
-  // Get last 5 matches
-  const matchIds = await getMatchHistory(account.puuid, 5);
-  const recentMatches: RecentMatch[] = [];
-  for (const matchId of matchIds) {
-    try {
-      const match = await getMatch(matchId);
-      const participant = match.info.participants.find(
-        (p) => p.puuid === account.puuid
-      );
-      if (participant) {
-        const scoreInputs = match.info.participants.map((mp) => ({
-          puuid: mp.puuid,
-          kills: mp.kills,
-          deaths: mp.deaths,
-          assists: mp.assists,
-          totalMinionsKilled: mp.totalMinionsKilled ?? 0,
-          neutralMinionsKilled: mp.neutralMinionsKilled ?? 0,
-          totalDamageDealtToChampions: mp.totalDamageDealtToChampions,
-          goldEarned: mp.goldEarned,
-          visionScore: mp.visionScore,
-          totalDamageDealtToObjectives: mp.totalDamageDealtToObjectives,
-          timeCCingOthers: mp.timeCCingOthers,
-          teamPosition: mp.teamPosition,
-          individualPosition: mp.individualPosition,
-          teamId: mp.teamId,
-          win: mp.win,
-        }));
-        const scoreResults = computePostScores(scoreInputs, match.info.gameDuration, matchId);
-        const playerScore = scoreResults.find((r) => r.puuid === account.puuid);
+  // Get last 10 matches — prefetch from Turso in one batch, then process in parallel
+  const matchIds = await getMatchHistory(account.puuid, 10);
+  const tursoEntries: PlayerMatchEntry[] = [];
+  let recentMatches: RecentMatch[] = [];
 
-        recentMatches.push({
-          win: participant.win,
-          championName: participant.championName,
-          kills: participant.kills,
-          deaths: participant.deaths,
-          assists: participant.assists,
-          gameEndTimestamp: match.info.gameEndTimestamp,
-          postScore: playerScore?.postScore ?? 0,
-        });
-      }
-    } catch {
-      // Skip failed match fetches
-    }
+  if (matchIds.length > 0) {
+    await prefetchMatchCache(matchIds);
+
+    const matchResults = await Promise.all(
+      matchIds.map(async (matchId) => {
+        try {
+          const match = await getMatch(matchId);
+          const participant = match.info.participants.find(
+            (p) => p.puuid === account.puuid
+          );
+          if (!participant) return null;
+
+          // Index all participants for cross-player cache benefit
+          for (const p of match.info.participants) {
+            tursoEntries.push({
+              puuid: p.puuid,
+              matchId,
+              queueId: match.info.queueId,
+              gameCreation: match.info.gameCreation,
+            });
+          }
+
+          const scoreInputs = match.info.participants.map((mp) => ({
+            puuid: mp.puuid,
+            kills: mp.kills,
+            deaths: mp.deaths,
+            assists: mp.assists,
+            totalMinionsKilled: mp.totalMinionsKilled ?? 0,
+            neutralMinionsKilled: mp.neutralMinionsKilled ?? 0,
+            totalDamageDealtToChampions: mp.totalDamageDealtToChampions,
+            goldEarned: mp.goldEarned,
+            visionScore: mp.visionScore,
+            totalDamageDealtToObjectives: mp.totalDamageDealtToObjectives,
+            timeCCingOthers: mp.timeCCingOthers,
+            teamPosition: mp.teamPosition,
+            individualPosition: mp.individualPosition,
+            teamId: mp.teamId,
+            win: mp.win,
+          }));
+          const scoreResults = computePostScores(scoreInputs, match.info.gameDuration, matchId);
+          const playerScore = scoreResults.find((r) => r.puuid === account.puuid);
+
+          return {
+            win: participant.win,
+            championName: participant.championName,
+            kills: participant.kills,
+            deaths: participant.deaths,
+            assists: participant.assists,
+            gameEndTimestamp: match.info.gameEndTimestamp,
+            postScore: playerScore?.postScore ?? 0,
+          } satisfies RecentMatch;
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    clearMatchPrefetch();
+    recentMatches = matchResults.filter((m): m is RecentMatch => m !== null);
   }
+  savePlayerMatches(tursoEntries);
 
   return {
     puuid: account.puuid,
