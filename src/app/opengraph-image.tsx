@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "LoL Tracker — Sprawdź kto gra w League of Legends";
+export const alt = "LoL Tracker - Sprawdź kto gra w League of Legends";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -16,7 +16,8 @@ export default async function OGImage() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(135deg, #010a13 0%, #0a1628 40%, #0d2137 70%, #0a1628 100%)",
+          background:
+            "linear-gradient(135deg, #010a13 0%, #0a1628 40%, #0d2137 70%, #0a1628 100%)",
           position: "relative",
         }}
       >
@@ -28,7 +29,8 @@ export default async function OGImage() {
             left: 0,
             right: 0,
             height: "4px",
-            background: "linear-gradient(90deg, transparent, #c8aa6e, #f0e6d3, #c8aa6e, transparent)",
+            background:
+              "linear-gradient(90deg, transparent, #c8aa6e, #f0e6d3, #c8aa6e, transparent)",
           }}
         />
         {/* Bottom gold border */}
@@ -39,7 +41,8 @@ export default async function OGImage() {
             left: 0,
             right: 0,
             height: "4px",
-            background: "linear-gradient(90deg, transparent, #c8aa6e, #f0e6d3, #c8aa6e, transparent)",
+            background:
+              "linear-gradient(90deg, transparent, #c8aa6e, #f0e6d3, #c8aa6e, transparent)",
           }}
         />
 
@@ -85,7 +88,8 @@ export default async function OGImage() {
           style={{
             width: "200px",
             height: "1px",
-            background: "linear-gradient(90deg, transparent, #c8aa6e, transparent)",
+            background:
+              "linear-gradient(90deg, transparent, #c8aa6e, transparent)",
             margin: "24px 0",
           }}
         />
@@ -116,15 +120,39 @@ export default async function OGImage() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#0ac8b9", display: "flex" }} />
+            <div
+              style={{
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                background: "#0ac8b9",
+                display: "flex",
+              }}
+            />
             <span>Live game</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#c89b3c", display: "flex" }} />
+            <div
+              style={{
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                background: "#c89b3c",
+                display: "flex",
+              }}
+            />
             <span>Rangi</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#1db954", display: "flex" }} />
+            <div
+              style={{
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                background: "#1db954",
+                display: "flex",
+              }}
+            />
             <span>Mecze</span>
           </div>
         </div>

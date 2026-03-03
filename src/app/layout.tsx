@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Cinzel, Fira_Sans } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { RateLimitModal } from "@/components/rate-limit-modal";
 import { MusicPlayer } from "@/components/music-player/music-player";
 import "./globals.css";
@@ -18,7 +20,7 @@ const firaSans = Fira_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "LoL Tracker — Sprawdź kto gra",
+    default: "LoL Tracker - Sprawdź kto gra",
     template: "%s | LoL Tracker",
   },
   description:
@@ -39,7 +41,7 @@ export const metadata: Metadata = {
   authors: [{ name: "jaqubowsky", url: "https://github.com/jaqubowsky" }],
   creator: "jaqubowsky",
   openGraph: {
-    title: "LoL Tracker — Sprawdź kto gra",
+    title: "LoL Tracker - Sprawdź kto gra",
     description:
       "Śledź znajomych w League of Legends na żywo. Rangi, live game, historia meczy — wszystko w jednym miejscu.",
     type: "website",
@@ -48,7 +50,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "LoL Tracker — Sprawdź kto gra",
+    title: "LoL Tracker - Sprawdź kto gra",
     description:
       "Śledź znajomych w League of Legends na żywo. Rangi, live game, historia meczy.",
   },
@@ -72,12 +74,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pl">
-      <body className={`${cinzel.variable} ${firaSans.variable} bg-bg-primary text-text-primary min-h-dvh relative flex flex-col`}>
-        <div className="relative z-10 flex-1 pb-36">
-          {children}
-        </div>
+      <body
+        className={`${cinzel.variable} ${firaSans.variable} bg-bg-primary text-text-primary min-h-dvh relative flex flex-col`}
+      >
+        <div className="relative z-10 flex-1 pb-36">{children}</div>
         <RateLimitModal />
         <MusicPlayer />
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
