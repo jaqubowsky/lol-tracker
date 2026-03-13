@@ -59,6 +59,8 @@ declare namespace YT {
     seekTo(seconds: number, allowSeekAhead: boolean): void;
     playVideoAt(index: number): void;
     getVideoData(): { title: string; author: string; video_id: string };
+    getPlaylist(): string[];
+    getPlaylistIndex(): number;
     destroy(): void;
   }
 }

@@ -9,7 +9,7 @@ export default async function PlayerPage({
   const { puuid } = await params;
 
   return (
-    <main className="max-w-4xl mx-auto px-3 sm:px-4 py-6 sm:py-8 min-h-screen">
+    <main className="max-w-4xl mx-auto px-3 sm:px-4 pb-6 sm:pb-8 min-h-screen">
       <Suspense fallback={
         <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)]">
           <div className="w-8 h-8 border-2 border-gold-dark border-t-gold-primary rounded-full animate-spin mb-4" />

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useYouTubePlayer } from "./use-youtube-player";
+import { SongSelector } from "./song-selector";
 
 const PLAYER_CONTAINER_ID = "yt-music-player";
 
@@ -14,12 +15,17 @@ function formatTime(seconds: number): string {
 export function MusicPlayer() {
   const [mounted, setMounted] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [volume, setVolumeLocal] = useState(50);
+  const [volume, setVolumeLocal] = useState(() => {
+    if (typeof window === "undefined") return 50;
+    const saved = localStorage.getItem("yt-music-volume");
+    return saved !== null ? Number(saved) : 50;
+  });
   const progressRef = useRef<HTMLDivElement>(null);
 
   const {
     isReady,
     isPlaying,
+    isRestoring,
     isShuffled,
     currentTitle,
     currentTime,
@@ -31,6 +37,11 @@ export function MusicPlayer() {
     toggleShuffle,
     setVolume,
     seekTo,
+    playVideoAt,
+    playlistVideoIds,
+    currentIndex,
+    videoTitles,
+    videoTitlesVersion: _vt,
   } = useYouTubePlayer(PLAYER_CONTAINER_ID);
 
   useEffect(() => setMounted(true), []);
@@ -81,16 +92,27 @@ export function MusicPlayer() {
           backdropFilter: "blur(12px)",
         }}
       >
-        {/* Iframe panel */}
+        {/* Combined panel: song selector (left) + iframe (right) */}
         <div
           className="grid transition-[grid-template-rows] duration-300 ease-out"
           style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
         >
           <div className="overflow-hidden min-h-0">
-            <div className="flex justify-center py-3 px-4">
+            <div className="flex gap-3 py-3 px-4 max-w-4xl mx-auto items-stretch" style={{ height: "288px" }}>
+              {/* Song list — left */}
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <SongSelector
+                  videoIds={playlistVideoIds}
+                  currentIndex={currentIndex}
+                  cachedTitles={videoTitles}
+                  onPlay={playVideoAt}
+                />
+              </div>
+              {/* Video — right, fills full height */}
               <div
-                className="rounded overflow-hidden w-full max-w-[400px] aspect-video yt-iframe-fill"
+                className="shrink-0 rounded overflow-hidden yt-iframe-fill h-full"
                 style={{
+                  aspectRatio: "16/9",
                   border: "1px solid var(--color-gold-dark)",
                   boxShadow:
                     "0 0 20px rgba(10, 200, 185, 0.1), inset 0 0 30px rgba(0,0,0,0.5)",
@@ -109,11 +131,12 @@ export function MusicPlayer() {
           </div>
         </div>
 
-        {/* Title */}
+        {/* Title — click to toggle panel */}
         {currentTitle && (
           <div className="mx-auto px-4 pt-2 overflow-hidden">
-            <div
-              className="text-[11px] text-center truncate"
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="w-full text-[11px] text-center truncate cursor-pointer hover:text-gold-primary transition-colors"
               style={{
                 color: "var(--color-text-secondary)",
                 fontFamily: "var(--font-body)",
@@ -121,7 +144,7 @@ export function MusicPlayer() {
               title={currentTitle}
             >
               {currentTitle}
-            </div>
+            </button>
           </div>
         )}
 
@@ -177,7 +200,7 @@ export function MusicPlayer() {
           <div className="flex items-center gap-0.5 justify-center">
             <button
               onClick={toggleShuffle}
-              disabled={!isReady}
+              disabled={!isReady || isRestoring}
               className="music-btn-sm group relative cursor-pointer disabled:cursor-not-allowed disabled:opacity-20"
               title={isShuffled ? "Losowe: wł." : "Losowe: wył."}
             >
@@ -205,7 +228,7 @@ export function MusicPlayer() {
 
             <button
               onClick={previousVideo}
-              disabled={!isReady}
+              disabled={!isReady || isRestoring}
               className="music-btn group cursor-pointer disabled:cursor-not-allowed disabled:opacity-20"
               title="Poprzedni"
             >
@@ -216,9 +239,9 @@ export function MusicPlayer() {
 
             <button
               onClick={isPlaying ? pause : play}
-              disabled={!isReady}
+              disabled={!isReady || isRestoring}
               className="music-btn-play group relative cursor-pointer disabled:cursor-not-allowed disabled:opacity-20"
-              title={isPlaying ? "Pauza" : "Odtwarzaj"}
+              title={isRestoring ? "Wznawianie..." : isPlaying ? "Pauza" : "Odtwarzaj"}
             >
               <div
                 className="absolute inset-0 rounded-full transition-opacity duration-500"
@@ -237,7 +260,9 @@ export function MusicPlayer() {
                   border: "1px solid var(--color-gold-dark)",
                 }}
               >
-                {isPlaying ? (
+                {isRestoring ? (
+                  <div className="w-4 h-4 border-2 border-gold-primary border-t-transparent rounded-full animate-spin" />
+                ) : isPlaying ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--color-bg-primary)">
                     <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                   </svg>
@@ -257,7 +282,7 @@ export function MusicPlayer() {
 
             <button
               onClick={nextVideo}
-              disabled={!isReady}
+              disabled={!isReady || isRestoring}
               className="music-btn group cursor-pointer disabled:cursor-not-allowed disabled:opacity-20"
               title="Następny"
             >

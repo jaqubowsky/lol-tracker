@@ -89,6 +89,7 @@ export function PlayerDetailPage({ puuid }: PlayerDetailPageProps) {
   const [scoreboardMatchId, setScoreboardMatchId] = useState<string | null>(
     () => searchParams.get("match")
   );
+  const [refreshing, setRefreshing] = useState(false);
 
   // Match cache — survives filter switches, keyed by filter combo
   const matchCache = useRef<Map<string, CacheEntry>>(new Map());
@@ -314,6 +315,50 @@ export function PlayerDetailPage({ puuid }: PlayerDetailPageProps) {
     fetchMatches(customRange, matches.length, 50);
   }, [timeRange, customDateRange, matches.length, fetchMatches]);
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setError(null);
+
+    // Clear caches so data is re-fetched from server
+    matchCache.current.clear();
+    resolvedPuuids.current.clear();
+    setResolvedNames(new Map());
+
+    try {
+      const detail = await fetchPlayerDetail(puuid, region);
+      setPlayer(detail);
+    } catch (err) {
+      checkRateLimit(err);
+      setError("Nie udało się załadować profilu gracza");
+      setRefreshing(false);
+      return;
+    }
+
+    try {
+      const customRange = timeRange === "custom" && customDateRange.startDate && customDateRange.endDate
+        ? customDateRange
+        : undefined;
+      await fetchMatches(customRange, 0, 50);
+    } catch (err) {
+      checkRateLimit(err);
+    }
+
+    setRefreshing(false);
+  }, [puuid, region, timeRange, customDateRange, fetchMatches]);
+
+  // Auto-refresh when browser tab regains focus (throttled to once per 60s)
+  const lastFocusRefresh = useRef(0);
+  useEffect(() => {
+    const onFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusRefresh.current < 60_000) return;
+      lastFocusRefresh.current = now;
+      handleRefresh();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [handleRefresh]);
+
   // Client-side filtering as safety net (server may return cached/broader data)
   const filteredMatches = useMemo(() => {
     let result = matches;
@@ -382,11 +427,12 @@ export function PlayerDetailPage({ puuid }: PlayerDetailPageProps) {
         </p>
         <div className="flex gap-3">
           <button
-            onClick={() => window.location.reload()}
-            className="inline-block px-4 py-2 bg-gold-dark/40 border border-gold-secondary/60 text-gold-bright text-sm uppercase tracking-wider rounded hover:bg-gold-dark/60 transition-colors cursor-pointer"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="inline-block px-4 py-2 bg-gold-dark/40 border border-gold-secondary/60 text-gold-bright text-sm uppercase tracking-wider rounded hover:bg-gold-dark/60 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            Spróbuj ponownie
+            {refreshing ? "Ładowanie..." : "Spróbuj ponownie"}
           </button>
           <a
             href="/"
@@ -402,7 +448,7 @@ export function PlayerDetailPage({ puuid }: PlayerDetailPageProps) {
 
   return (
     <div>
-      <PlayerHeader player={player} region={region} />
+      <PlayerHeader player={player} region={region} onRefresh={handleRefresh} refreshing={refreshing} />
 
       <div className="lol-divider mb-6" />
 
