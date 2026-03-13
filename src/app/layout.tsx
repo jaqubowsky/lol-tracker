@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Cinzel, Fira_Sans } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
+import Script from "next/script";
 import { RateLimitModal } from "@/components/rate-limit-modal";
 import { MusicPlayer } from "@/components/music-player/music-player";
 import "./globals.css";
@@ -80,8 +79,12 @@ export default function RootLayout({
         <div className="relative z-10 flex-1 pb-36">{children}</div>
         <RateLimitModal />
         <MusicPlayer />
-        <Analytics />
-        <SpeedInsights />
+        <Script
+          defer
+          src="https://umami.jnalewajk.me/script.js"
+          data-website-id="562028ee-6e0c-4fc4-ad2c-d9a7f5ca98ec"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );
