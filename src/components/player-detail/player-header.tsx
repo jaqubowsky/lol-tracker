@@ -69,9 +69,7 @@ export function PlayerHeader({ player, region, onRefresh, refreshing }: PlayerHe
         marginLeft: "calc(-50vw + 50%)",
         paddingLeft: "max(calc(50vw - 50% + 0.75rem), 1rem)",
         paddingRight: "max(calc(50vw - 50% + 0.75rem), 1rem)",
-        background: "rgba(1, 10, 19, 0.85)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
+        background: "rgb(1, 10, 19)",
         borderBottom: "1px solid rgba(200, 170, 110, 0.15)",
       }}
     >
