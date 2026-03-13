@@ -346,19 +346,6 @@ export function PlayerDetailPage({ puuid }: PlayerDetailPageProps) {
     setRefreshing(false);
   }, [puuid, region, timeRange, customDateRange, fetchMatches]);
 
-  // Auto-refresh when browser tab regains focus (throttled to once per 60s)
-  const lastFocusRefresh = useRef(0);
-  useEffect(() => {
-    const onFocus = () => {
-      const now = Date.now();
-      if (now - lastFocusRefresh.current < 60_000) return;
-      lastFocusRefresh.current = now;
-      handleRefresh();
-    };
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [handleRefresh]);
-
   // Client-side filtering as safety net (server may return cached/broader data)
   const filteredMatches = useMemo(() => {
     let result = matches;
