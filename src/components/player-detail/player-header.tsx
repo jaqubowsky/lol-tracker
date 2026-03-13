@@ -64,7 +64,7 @@ export function PlayerHeader({ player, region, onRefresh, refreshing }: PlayerHe
     <div
       className="sticky top-0 py-3 mb-6"
       style={{
-        zIndex: 1,
+        zIndex: 40,
         width: "100vw",
         marginLeft: "calc(-50vw + 50%)",
         paddingLeft: "max(calc(50vw - 50% + 0.75rem), 1rem)",

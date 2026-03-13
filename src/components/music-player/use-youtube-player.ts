@@ -11,6 +11,7 @@ const LS_PLAYING = "yt-music-playing";
 const LS_VOLUME = "yt-music-volume";
 const LS_SHUFFLE = "yt-music-shuffle";
 const LS_TITLE = "yt-music-title";
+const LS_DURATION = "yt-music-duration";
 
 function loadYTScript(): Promise<void> {
   return new Promise((resolve) => {
@@ -51,8 +52,16 @@ export function useYouTubePlayer(containerId: string) {
     if (typeof window === "undefined") return "";
     return localStorage.getItem(LS_TITLE) ?? "";
   });
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const saved = localStorage.getItem(LS_TIME);
+    return saved ? Number(saved) : 0;
+  });
+  const [duration, setDuration] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const saved = localStorage.getItem(LS_DURATION);
+    return saved ? Number(saved) : 0;
+  });
   const [isRestoring, setIsRestoring] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem(LS_INDEX) !== null;
@@ -75,6 +84,8 @@ export function useYouTubePlayer(containerId: string) {
   const firstPlayHandledRef = useRef(false);
   const interactionCleanupRef = useRef<(() => void) | null>(null);
   const autoplayCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedVolumeRef = useRef(50);
+  const restoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Save playback state to localStorage
   const saveState = useCallback(() => {
@@ -88,6 +99,8 @@ export function useYouTubePlayer(containerId: string) {
       localStorage.setItem(LS_INDEX, String(idx));
       localStorage.setItem(LS_TIME, String(Math.floor(time)));
       localStorage.setItem(LS_PLAYING, state === 1 ? "1" : "0");
+      const dur = p.getDuration();
+      if (dur) localStorage.setItem(LS_DURATION, String(Math.floor(dur)));
       if (data?.title) localStorage.setItem(LS_TITLE, data.title);
     } catch {
       // player might be destroyed already
@@ -155,10 +168,14 @@ export function useYouTubePlayer(containerId: string) {
 
             const p = playerRef.current!;
 
-            if (savedVolume !== null) {
-              p.setVolume(Number(savedVolume));
+            const targetVolume = savedVolume !== null ? Number(savedVolume) : 50;
+            savedVolumeRef.current = targetVolume;
+
+            if (shouldRestore) {
+              // Mute during restore to prevent audio blip
+              p.setVolume(0);
             } else {
-              p.setVolume(50);
+              p.setVolume(targetVolume);
             }
 
             p.setLoop(true);
@@ -172,6 +189,14 @@ export function useYouTubePlayer(containerId: string) {
               if (ids?.length) setPlaylistVideoIds(ids);
             } catch {
               // not available yet
+            }
+
+            // Safety: clear isRestoring after 5s regardless to prevent infinite spinner
+            if (shouldRestore) {
+              const restoreTimeout = setTimeout(() => {
+                if (!destroyedRef.current) setIsRestoring(false);
+              }, 5000);
+              restoreTimeoutRef.current = restoreTimeout;
             }
 
             // Fallback: if autoplay was blocked, play on first user interaction
@@ -233,7 +258,10 @@ export function useYouTubePlayer(containerId: string) {
                 setTimeout(() => {
                   if (destroyedRef.current) return;
                   try { playerRef.current?.pauseVideo(); } catch { /* ignore */ }
+                  try { playerRef.current?.setVolume(savedVolumeRef.current); } catch { /* ignore */ }
                 }, 200);
+              } else {
+                try { playerRef.current?.setVolume(savedVolumeRef.current); } catch { /* ignore */ }
               }
               return;
             }
@@ -251,7 +279,10 @@ export function useYouTubePlayer(containerId: string) {
                 setTimeout(() => {
                   if (destroyedRef.current) return;
                   try { playerRef.current?.pauseVideo(); } catch { /* ignore */ }
+                  try { playerRef.current?.setVolume(savedVolumeRef.current); } catch { /* ignore */ }
                 }, 200);
+              } else {
+                try { playerRef.current?.setVolume(savedVolumeRef.current); } catch { /* ignore */ }
               }
             }
 
@@ -313,6 +344,10 @@ export function useYouTubePlayer(containerId: string) {
     return () => {
       destroyedRef.current = true;
       saveState();
+      if (restoreTimeoutRef.current) {
+        clearTimeout(restoreTimeoutRef.current);
+        restoreTimeoutRef.current = null;
+      }
       if (autoplayCheckRef.current) {
         clearTimeout(autoplayCheckRef.current);
         autoplayCheckRef.current = null;
